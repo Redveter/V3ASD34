@@ -19,8 +19,10 @@ jobs:
       SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
       NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
       REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
       WORKFLOW_FILE: "enigmano.yml"
       DEPLOYMENT_ID: ${{ github.run_id }}
+      SCRIPT_URL: "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
 
     steps:
       - name: 🦈 Checkout repo
@@ -65,7 +67,7 @@ jobs:
             Write-Host 'ADVERTENCIA: SECRET_SHAHZAIB no esta configurado. Se omitira el encadenamiento de la siguiente instancia.'
           }
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          Write-Host ' 📝 Tokens verificados'
+          Write-Host 'Tokens verificados'
 
       - name: 📦 Instalacion de software
         shell: powershell
@@ -116,11 +118,10 @@ jobs:
 
           $imgUrl  = "https://static0.gamerantimages.com/wordpress/wp-content/uploads/wm/2025/06/hollow-knight-silksong-hornet-close-up-over-gameplay-screenshot.jpg"
           $imgPath = Join-Path $themeDir "wallpaper.jpg"
-          Invoke-WebRequest -Uri $imgUrl -OutFile $imgPath -UseBasicParsing
+          Invoke-WebRequest -Uri $imgUrl -OutFile $imgPath -UseBasicParsing -ErrorAction Stop
 
-          # Avoid PowerShell here-strings inside YAML by using -MemberDefinition
-          $member = '[DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
-          Add-Type -Namespace Win32 -Name Native -MemberDefinition "using System.Runtime.InteropServices; public static class Native { $member }"
+          # Define P/Invoke without inline using; fully-qualify the attribute
+          Add-Type -Namespace Win32 -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -Value $imgPath
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -Value 6
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value 0
@@ -140,9 +141,29 @@ jobs:
 
           $scriptPath = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $scriptPath) {
-            Write-Error "No se encontró 'EnigMano-instance.ps1' en el repositorio."
-            Get-ChildItem -Path . -Recurse -Filter 'EnigMano-instance.ps1' | Select-Object FullName
-            exit 1
+            if (-not $env:SCRIPT_URL) {
+              Write-Error "No se encontró 'EnigMano-instance.ps1' local y SCRIPT_URL no está definido."
+              Get-ChildItem -Path . -Recurse -Filter 'EnigMano-instance.ps1' | Select-Object FullName
+              exit 1
+            }
+
+            $downloadPath = Join-Path $env:RUNNER_TEMP "EnigMano-instance.ps1"
+            Write-Host ("Descargando script desde {0} a {1}" -f $env:SCRIPT_URL, $downloadPath)
+            try {
+              Invoke-WebRequest -Uri $env:SCRIPT_URL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+            } catch {
+              Write-Host "Descarga directa falló. Intentando vía API de GitHub..."
+              if ($env:SECRET_SHAHZAIB) {
+                $apiUrl = "https://api.github.com/repos/$env:REPO/contents/EnigMano-instance.ps1?ref=$env:BRANCH"
+                $headers = @{ Authorization = "Bearer $env:SECRET_SHAHZAIB"; 'User-Agent' = 'EnigMano-Runner'; Accept = 'application/vnd.github.v3.raw' }
+                Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+              } else {
+                Write-Error "No se pudo descargar el script y no hay token para usar la API de GitHub."
+                throw
+              }
+            }
+            if (-not (Test-Path $downloadPath)) { Write-Error "Descarga del script fallida."; exit 1 }
+            $scriptPath = $downloadPath
           }
 
           Write-Host ("Ejecutando script: {0}" -f $scriptPath)
