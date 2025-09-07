@@ -1,166 +1,134 @@
-name: Nex Instance Deployment
+name: "⚡ Despliegue de EnigMano Windows 11"
 
 on:
   workflow_dispatch:
     inputs:
-      instance_number:
-        description: 'Número de instancia (1-10)'
+      INSTANCE:
+        description: "Número de instancia a desplegar (p. ej., 1, 2, 3...)"
         required: true
-        default: '1'
-        type: string
+        default: "1"
 
 jobs:
-  deploy-rdp:
+  deploy-enigmano:
+    name: "🚀 Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
-    timeout-minutes: 360
-    
+
+    env:
+      INSTANCE_ID: ${{ github.event.inputs.INSTANCE }}
+      SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
+      NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
+      REPO: ${{ github.repository }}
+      WORKFLOW_FILE: "enigmano.yml"
+      DEPLOYMENT_ID: ${{ github.run_id }}
+
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      
-    - name: System Information
-      run: |
-        Write-Host "=== Implementación de Nex RDP ===" -ForegroundColor Green
-        Write-Host "Número de instancia: ${{ github.event.inputs.instance_number }}" -ForegroundColor Yellow
-        Write-Host "Ejecutor: $env:RUNNER_NAME" -ForegroundColor Yellow
-        Write-Host "Flujo de trabajo: $env:GITHUB_WORKFLOW" -ForegroundColor Yellow
-        
-        # System specs
-        Write-Host "`n=== ESPECIFICACIONES DEL SISTEMA ===" -ForegroundColor Cyan
-        Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory
-        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
-        
-    - name: Enable RDP
-      run: |
-        Write-Host "Habilitando Escritorio Remoto..." -ForegroundColor Green
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-        
-    - name: Create User Account
-      run: |
-        Write-Host "Configurando cuenta de usuario..." -ForegroundColor Green
-        $Password = ConvertTo-SecureString "P@ssw0rd!" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $Password
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        Write-Host "Usuario: runneradmin" -ForegroundColor Yellow
-        Write-Host "Contraseña: P@ssw0rd!" -ForegroundColor Yellow
-        
-    - name: Download and Setup ngrok
-      run: |
-        Write-Host "Descargando ngrok..." -ForegroundColor Green
-        Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
-        Expand-Archive ngrok.zip -DestinationPath C:\ngrok
-        
-    - name: Configure ngrok
-      run: |
-        Write-Host "Configurando ngrok..." -ForegroundColor Green
-        C:\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_NEV }}
-        
-    - name: Install Essential Software
-      run: |
-        Write-Host "Instalando software esencial..." -ForegroundColor Green
-        
-        # Install Chocolatey
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-        
-        # Install Chrome
-        choco install googlechrome -y
-        
-        # Install 7-Zip
-        choco install 7zip -y
-        
-        # Install Notepad++
-        choco install notepadplusplus -y
-        
-        # Install WinRAR
-        choco install winrar -y
-        
-        Write-Host "¡Instalación de software completada!" -ForegroundColor Green
-        
-    - name: Configure Chrome Extensions
-      run: |
-        Write-Host "Configurando Chrome con extensiones de seguridad..." -ForegroundColor Green
-        
-        # Create Chrome preferences for extensions
-        $ChromePrefs = @"
-{
-  "extensions": {
-    "settings": {
-      "cjpalhdlnbpafiamejdnhcphjbkeiagm": {
-        "state": 1,
-        "was_installed_by_default": false,
-        "was_installed_by_oem": false,
-        "was_installed_by_custodian": false,
-        "creation_flags": 1,
-        "location": 1,
-        "manifest": {
-          "name": "uBlock Origin",
-          "version": "1.0"
-        }
-      }
-    }
-  }
-}
-"@
-        
-        $ChromeDir = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
-        if (!(Test-Path $ChromeDir)) {
-          New-Item -ItemType Directory -Path $ChromeDir -Force
-        }
-        
-        $ChromePrefs | Out-File -FilePath "$ChromeDir\Preferences" -Encoding UTF8
-        
-    - name: Setup Cloudflare WARP
-      run: |
-        Write-Host "Configurando Cloudflare WARP..." -ForegroundColor Green
-        try {
-          Invoke-WebRequest -Uri "https://downloads.cloudflareclient.com/v1/download/windows/ga" -OutFile "CloudflareWARP.msi"
-          Start-Process msiexec.exe -Wait -ArgumentList '/I CloudflareWARP.msi /quiet'
-          Write-Host "¡Cloudflare WARP instalado correctamente!" -ForegroundColor Green
-        } catch {
-          Write-Host "Falló la instalación de Cloudflare WARP, continuando..." -ForegroundColor Yellow
-        }
-        
-    - name: Start ngrok Tunnel
-      run: |
-        Write-Host "Iniciando túnel de ngrok..." -ForegroundColor Green
-        Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389" -WindowStyle Hidden
-        Start-Sleep -Seconds 10
-        
-    - name: Get Connection Details
-      run: |
-        Write-Host "`n=== DETALLES DE CONEXIÓN ===" -ForegroundColor Green
-        try {
-          $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
-          $publicUrl = $ngrokApi.tunnels[0].public_url
-          $host = $publicUrl -replace "tcp://", ""
-          
-          Write-Host "╔══════════════════════════════════════╗" -ForegroundColor Cyan
-          Write-Host "║         Acceso Nex RDP           ║" -ForegroundColor Cyan  
-          Write-Host "╠══════════════════════════════════════╣" -ForegroundColor Cyan
-          Write-Host "║ Host: $host" -ForegroundColor White
-          Write-Host "║ Usuario: runneradmin                 ║" -ForegroundColor White
-          Write-Host "║ Contraseña: P@ssw0rd!                ║" -ForegroundColor White
-          Write-Host "╚══════════════════════════════════════╝" -ForegroundColor Cyan
-          
-          Write-Host "`nInstrucciones de conexión:" -ForegroundColor Yellow
-          Write-Host "1. Abra Conexión a Escritorio Remoto" -ForegroundColor White
-          Write-Host "2. Introduzca la dirección del host arriba" -ForegroundColor White
-          Write-Host "3. Use las credenciales proporcionadas" -ForegroundColor White
-          Write-Host "4. IMPORTANTE: Minimice (no cierre) esta ventana para mantener la conexión activa!" -ForegroundColor Red
-          
-        } catch {
-          Write-Host "Error al obtener detalles de ngrok. Verificando manualmente..." -ForegroundColor Red
-          Start-Sleep -Seconds 5
-          try {
-            $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
-            $publicUrl = $ngrokApi.tunnels[0].public_url
-            Write-Host "Verificación manual - URL de ngrok: $publicUrl" -ForegroundColor Green
-          } catch {
-            Write-Host "API de ngrok no accesible. Por favor, verifique el estado de ngrok manualmente." -ForegroundColor Red
+      - name: Parámetros del despliegue
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $prevInstance = [int]$env:INSTANCE_ID - 1
+          Write-Host "::group::Parámetros del despliegue"
+          Write-Host "==============================================="
+          Write-Host "Instancia EnigMano      : $env:INSTANCE_ID"
+          Write-Host "Instancia anterior      : $prevInstance"
+          Write-Host "Repositorio de GitHub   : $env:REPO"
+          Write-Host "Workflow de despliegue  : $env:WORKFLOW_FILE"
+          Write-Host "ID de despliegue        : $env:DEPLOYMENT_ID"
+          Write-Host "==============================================="
+          Write-Host "::endgroup::"
+
+      - name: Validar secretos
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Validación de secretos"
+          if (-not $env:NGROK_SHAHZAIB) {
+            Write-Error "[ERROR] Falta el token de Ngrok: NGROK_SHAHZAIB"
+            exit 1
           }
-        }
-        
+          if (-not $env:SECRET_SHAHZAIB) {
+            Write-Host "[WARN] SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
+          }
+          Write-Host "[OK] Validación de secretos completada"
+          Write-Host "::endgroup::"
+
+      - name: Instalar software con Chocolatey (Brave, WinRAR, Notepad++)
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Instalación de software"
+          Write-Host "[INFO] Preparando Chocolatey..."
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          choco --version | Out-Host
+
+          function Install-App {
+            param([string]$Id,[string]$Nombre)
+            choco install $Id -y --no-progress
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "[OK] $Nombre instalado"
+            } else {
+              Write-Host "[SKIP] $Nombre ya estaba instalado u omitido (código $LASTEXITCODE)"
+            }
+          }
+
+          Install-App -Id 'brave' -Nombre 'Brave'
+          Install-App -Id 'winrar' -Nombre 'WinRAR'
+          Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
+          Write-Host "::endgroup::"
+
+      - name: Forzar instalación de uBlock Origin en Brave
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Política para uBlock Origin (Brave)"
+          Write-Host "[INFO] Configurando directiva para forzar la instalación de uBlock Origin en Brave..."
+          $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
+          New-Item -Path $policyPath -Force | Out-Null
+          New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
+          Write-Host "[OK] Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
+          Write-Host "::endgroup::"
+
+      - name: Descargar EnigMano-Instance.ps1
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Descarga del script EnigMano"
+          $repo = "$env:REPO"
+          $branch = $env:GITHUB_REF_NAME
+          if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
+          $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
+          Write-Host "[INFO] Origen: $url"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop
+          } catch {
+            Write-Error "[ERROR] Error al descargar EnigMano-Instance.ps1: $($_.Exception.Message)"
+            exit 1
+          }
+          if (!(Test-Path "./EnigMano-Instance.ps1")) {
+            Write-Error "[ERROR] No se encontró el archivo descargado EnigMano-Instance.ps1"
+            exit 1
+          }
+          Write-Host "[OK] EnigMano-Instance.ps1 descargado"
+          Write-Host "::endgroup::"
+
+      - name: Ejecutar script de instancia EnigMano
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Ejecución del script"
+          Write-Host "[INFO] Iniciando EnigMano-Instance.ps1"
+          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
+          Write-Host "::endgroup::"
+
+      - name: Estado final
+        if: always()
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Estado final"
+          Write-Host "[OK] Instancia EnigMano $env:INSTANCE_ID finalizada"
+          Write-Host "[INFO] Impulsado por: SHAHZAIB-YT"
+          Write-Host "[OK] Despliegue ejecutado con precisión"
+          Write-Host "::endgroup::"
