@@ -1,275 +1,160 @@
-param(
-    [string]$Username,
-    [string]$Password,
-    [string]$InstanceLabel
-)
+name: "🏢 Windows 11 - RPD"
 
-$ErrorActionPreference = "Stop"
+on:
+  workflow_dispatch:
+    inputs:
+      INSTANCE:
+        description: "⌨️ Numero de instancia [1-10]:"
+        required: true
+        default: "1"
+        type: string
 
-# Ensure TLS 1.2 is enabled for all web requests (Invoke-WebRequest/Invoke-RestMethod)
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+jobs:
+  deploy-enigmano:
+    name: "Instancia - ${{ github.event.inputs.INSTANCE }}"
+    runs-on: windows-latest
 
-function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
-function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
-function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
+    env:
+      INSTANCE_ID: ${{ github.event.inputs.INSTANCE }}
+      SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
+      NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      WORKFLOW_FILE: "enigmano.yml"
+      DEPLOYMENT_ID: ${{ github.run_id }}
+      SCRIPT_URL: "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
+      WALLPAPER_URL: "https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg"
 
-# === INPUT NORMALIZATION ===
-if ([string]::IsNullOrWhiteSpace($InstanceLabel)) { $InstanceLabel = "Nex" }
-if ([string]::IsNullOrWhiteSpace($Username))      { $Username      = "Nex" }
-if ([string]::IsNullOrWhiteSpace($Password))      { $Password      = "Example#9943" }
+    steps:
+      - name: 🦈 Checkout repo
+        uses: actions/checkout@v4
 
+      - name: 🪙 Informacion del sistema
+        run: |
+          Write-Host "=== ENIGMANO RDP DEPLOYMENT ===" -ForegroundColor Green
+          Write-Host "Instance Number: $env:INSTANCE_ID" -ForegroundColor Yellow
+          Write-Host "Runner: $env:RUNNER_NAME" -ForegroundColor Yellow
+          Write-Host "Workflow: $env:GITHUB_WORKFLOW" -ForegroundColor Yellow
+          
+          # System specs
+          Write-Host "`n=== SYSTEM SPECIFICATIONS ===" -ForegroundColor Cyan
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory
+          Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+        
+      - name: ⚙️ Parametros
+        shell: powershell
+        run: |
+          # script
+          $ProgressPreference = 'SilentlyContinue'
+          $prevInstance = [int]$env:INSTANCE_ID - 1
+          Write-Host '==============================================='
+          Write-Host ("Instancia EnigMano    : {0}" -f $env:INSTANCE_ID)
+          Write-Host ("Instancia anterior    : {0}" -f $prevInstance)
+          Write-Host ("Repositorio           : {0}" -f $env:REPO)
+          Write-Host ("Workflow              : {0}" -f $env:WORKFLOW_FILE)
+          Write-Host ("ID de despliegue      : {0}" -f $env:DEPLOYMENT_ID)
+          Write-Host '==============================================='
 
-# === ASCII BANNER ===
-$now = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Write-Host @"
-----------------------------------------------------
-       ENIGMANO INSTANCIA $env:INSTANCE_ID - $InstanceLabel
-----------------------------------------------------
-   ESTADO     : Inicializando secuencia de despliegue
-   USUARIO    : $Username
-   HORA       : $now
-   ARQUITECTO : SHAHZAIB-YT
-----------------------------------------------------
-"@
+      - name: 🔐 Validacion tokens
+        shell: powershell
+        run: |
+          # script
+          $ProgressPreference = 'SilentlyContinue'
+          if (-not $env:NGROK_SHAHZAIB) {
+            Write-Error 'Falta el token de Ngrok: NGROK_SHAHZAIB'
+            exit 1
+          }
+          if (-not $env:SECRET_SHAHZAIB) {
+            Write-Host 'ADVERTENCIA: SECRET_SHAHZAIB no esta configurado. Se omitira el encadenamiento de la siguiente instancia.'
+          }
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host 'Tokens verificados'
 
-# === ENVIRONMENT VARIABLES ===
-$SECRET_SHAHZAIB = $env:SECRET_SHAHZAIB
-$NGROK_SHAHZAIB  = $env:NGROK_SHAHZAIB
-$INSTANCE_ID     = [int]$env:INSTANCE_ID
-$NEXT_INSTANCE_ID = $INSTANCE_ID + 1
-$WORKFLOW_FILE   = "enigmano.yml"
-$BRANCH          = "main"
-$RUNNER_ENV      = $env:RUNNER_ENV
-$WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
+      - name: 📦 Instalacion de software
+        shell: powershell
+        run: |
+          # script
+          Write-Host 'Instalacion de software'
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host 'Preparando Chocolatey...'
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
+          choco --version *> $null
+          Write-Host 'Chocolatey listo'
 
-# === TUNNEL SETUP ===
-Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
-Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
-Expand-Archive ngrok.zip -DestinationPath .
-.\ngrok.exe authtoken $NGROK_SHAHZAIB
-Log "Canal de transporte seguro iniciado"
+          function Install-App {
+            param([string]$Id,[string]$Nombre)
+            choco install $Id -y --no-progress *> $null
+            $code = $LASTEXITCODE
+            if ($code -in 0,3010) { Write-Host ("OK: {0} instalado" -f $Nombre) }
+            elseif ($code -eq 0)  { Write-Host ("OK: {0} instalado" -f $Nombre) }
+            else { Write-Host ("AVISO: {0} pudo no instalarse correctamente (codigo {1})" -f $Nombre,$code) }
+          }
 
-# === ACCESS ENABLEMENT ===
- Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
- Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
- Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
+          Install-App -Id 'brave' -Nombre 'Brave'
+          Install-App -Id 'winrar' -Nombre 'WinRAR'
+          Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
 
- # Ensure the Remote Desktop service is running and set to Automatic
- Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
- Start-Service -Name TermService -ErrorAction SilentlyContinue
+      - name: 🪙 Extensión - uBlock Origin (Brave)
+        shell: powershell
+        run: |
+          Write-Host 'Politica uBlock Origin (Brave)'
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host 'Aplicando directiva para forzar la instalacion de uBlock Origin en Brave...'
+          $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
+          New-Item -Path $policyPath -Force | Out-Null
+          New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
+          Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
- $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
- $existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
- if ($existing) {
-     Set-LocalUser -Name $Username -Password $secPass
-     Log "Usuario local actualizado: $Username"
- } else {
-     New-LocalUser -Name $Username -Password $secPass -AccountNeverExpires | Out-Null
-     Log "Usuario local creado: $Username"
- }
- Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username -ErrorAction SilentlyContinue
- Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
- Log "Protocolos de acceso habilitados para la instancia"
+      
 
- # (Opcional) Restringir/Eliminar acceso del usuario por defecto de GitHub Actions (runneradmin)
- try {
-     $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-     if ($runner) {
-         # Evitar acceso por RDP y deshabilitar la cuenta para que no pueda iniciar sesion futura
-         Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
-         Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-         try { Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue } catch {}
-         Log "Usuario 'runneradmin' deshabilitado, removido de RDP y eliminado (si fue posible)"
-     } else {
-         Log "Usuario 'runneradmin' no existe en este entorno"
-     }
- } catch {
-     Log "No se pudo modificar 'runneradmin': $($_.Exception.Message)"
- }
+      - name: ⚡ Ejecucion del script
+        shell: powershell
+        run: |
+          # script
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:GITHUB_WORKSPACE
 
-# === WALLPAPER (aplicacion al iniciar sesion del usuario) ===
-try {
-    Log "Configurando wallpaper para usuario '$Username'"
+          $candidatePaths = @(
+            ".\powershell\EnigMano-instance.ps1",
+            ".\EnigMano-instance.ps1"
+          )
 
-    $wpRoot = "C:\\ProgramData\\EnigMano"
-    New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
-
-    $ext = [IO.Path]::GetExtension(([Uri]$WALLPAPER_URL).AbsolutePath)
-    if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.jpg' }
-    $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
-
-    try {
-        $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
-        Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
-        Log "Wallpaper descargado en $wpPath"
-    } catch {
-        Log "No se pudo descargar el wallpaper: $($_.Exception.Message)"
-    }
-
-    if (Test-Path $wpPath) {
-        $startupDir = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-        New-Item -Path $startupDir -ItemType Directory -Force | Out-Null
-
-        # Crear script PowerShell que aplica el wallpaper en HKCU y refresca
-        $psApplyPath = Join-Path $wpRoot "ApplyEnigManoWallpaper.ps1"
-        $psContent = @"
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value '$wpPath'
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 10
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
-rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
-
-# Crear carpeta Data en el escritorio del usuario actual (Nex) si no existe
-$desktop = [Environment]::GetFolderPath('Desktop')
-$dataDir = Join-Path $desktop 'Data'
-if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
-"@
-        Set-Content -Path $psApplyPath -Value $psContent -Encoding UTF8
-
-        # Crear lanzador .cmd en Inicio de Todos los usuarios
-        $cmdPath = Join-Path $startupDir "ApplyEnigManoWallpaper.cmd"
-        $cmdContent = @"
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "$psApplyPath"
-del "%~f0" >nul 2>&1
-"@
-        Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
-        Log "Scripts de inicio creados: $psApplyPath y $cmdPath"
-    }
-} catch {
-    Log "Error general al configurar el wallpaper: $($_.Exception.Message)"
-}
-
- try {
-     if ($InstanceLabel) {
-         $currentName = (Get-ComputerInfo).CsName
-         if ($currentName -ne $InstanceLabel) {
-             Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
-            Log "Computer name set to '$InstanceLabel' (will apply after restart)"
-         }
-     }
- } catch {
-     Log "Failed to change computer name in this environment: $($_.Exception.Message)"
- }
-
-# === REGION SCAN LOOP ===
-$tunnel = $null
-$regionList = @("us", "eu", "ap", "au", "sa", "jp", "in")
-$regionIndex = 0
-
-while (-not $tunnel) {
-    $region = $regionList[$regionIndex]
-    $regionIndex = ($regionIndex + 1) % $regionList.Count
-    Log "Explorando region operativa: $region"
-
-    Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Process -FilePath .\ngrok.exe -ArgumentList "tcp --region $region 3389" -WindowStyle Hidden
-    Start-Sleep -Seconds 10
-
-    try {
-        $resp = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-        $tunnel = ($resp.tunnels | Where-Object { $_.proto -eq "tcp" }).public_url
-        if ($tunnel) {
-            Log "Tunel establecido: $tunnel"
-            break
-        }
-    } catch {
-        Log "Fallo al consultar la region, cambiando a la siguiente zona..."
-    }
-
-    Start-Sleep -Seconds 5
-}
-
- 
-
-$tunnelClean = $tunnel -replace "^tcp://", ""
-Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContrasena: $Password"
-
-# === TIMERS ===
-$totalMinutes    = 340
-$handoffMinutes  = 330
-$shutdownMinutes = 335
-$startTime       = Get-Date
-$endTime         = $startTime.AddMinutes($totalMinutes)
-$handoffTime     = $startTime.AddMinutes($handoffMinutes)
-$shutdownTime    = $startTime.AddMinutes($shutdownMinutes)
-
-# === HANDOFF MONITOR (randomized) ===
-while ((Get-Date) -lt $handoffTime) {
-    $now       = Get-Date
-    $elapsed   = [math]::Round(($now - $startTime).TotalMinutes, 1)
-    $remaining = [math]::Round(($endTime - $now).TotalMinutes, 1)
-    Log "Tiempo activo: $elapsed min | Ventana restante: $remaining min"
-
-    $waitMinutes = Get-Random -Minimum 15 -Maximum 30
-    Start-Sleep -Seconds ($waitMinutes * 60)
-}
-
-# === DISPATCH NEXT INSTANCE ===
-if (-not $SECRET_SHAHZAIB) {
-    Log "SECRET_SHAHZAIB ausente. Omitiendo encadenamiento de la siguiente instancia."
-} else {
-    try {
-        $commonHeaders = @{
-            Authorization = "Bearer $SECRET_SHAHZAIB"
-            Accept        = "application/vnd.github.v3+json"
-            'User-Agent'  = "EnigMano-Runner"
-        }
-
-        # Get authenticated user info
-        $userInfo = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $commonHeaders
-        Log "Controlador autenticado: $($userInfo.login)"
-
-        # Detect the current repository automatically from GITHUB_REPOSITORY env variable if available
-        if ($env:GITHUB_REPOSITORY) {
-            $userRepo = $env:GITHUB_REPOSITORY
-            Log "Repositorio detectado desde el entorno: $userRepo"
-        }
-        else {
-            Log "Obteniendo lista de repositorios del usuario autenticado..."
-            $repos = Invoke-RestMethod -Uri "https://api.github.com/user/repos?per_page=100" -Headers $commonHeaders
-            $currentRepo = (Get-Location).Path | Split-Path -Leaf
-            $userRepo = ($repos | Where-Object { $_.name -eq $currentRepo }).full_name
-
-            if (-not $userRepo) {
-                Fail "Repositorio '$currentRepo' no encontrado en tu cuenta."
+          $scriptPath = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $scriptPath) {
+            if (-not $env:SCRIPT_URL) {
+              Write-Error "No se encontró 'EnigMano-instance.ps1' local y SCRIPT_URL no está definido."
+              Get-ChildItem -Path . -Recurse -Filter 'EnigMano-instance.ps1' | Select-Object FullName
+              exit 1
             }
-        }
 
-        # Prepare dispatch payload
-        $dispatchPayload = @{
-            ref    = $BRANCH
-            inputs = @{ INSTANCE = "$NEXT_INSTANCE_ID" }
-        } | ConvertTo-Json -Depth 3
+            $downloadPath = Join-Path $env:RUNNER_TEMP "EnigMano-instance.ps1"
+            Write-Host ("Descargando script desde {0} a {1}" -f $env:SCRIPT_URL, $downloadPath)
+            try {
+              Invoke-WebRequest -Uri $env:SCRIPT_URL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+            } catch {
+              Write-Host "Descarga directa falló. Intentando vía API de GitHub..."
+              if ($env:SECRET_SHAHZAIB) {
+                $apiUrl = "https://api.github.com/repos/$env:REPO/contents/EnigMano-instance.ps1?ref=$env:BRANCH"
+                $headers = @{ Authorization = "Bearer $env:SECRET_SHAHZAIB"; 'User-Agent' = 'EnigMano-Runner'; Accept = 'application/vnd.github.v3.raw' }
+                Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+              } else {
+                Write-Error "No se pudo descargar el script y no hay token para usar la API de GitHub."
+                throw
+              }
+            }
+            if (-not (Test-Path $downloadPath)) { Write-Error "Descarga del script fallida."; exit 1 }
+            $scriptPath = $downloadPath
+          }
 
-        $dispatchURL = "https://api.github.com/repos/$userRepo/actions/workflows/$WORKFLOW_FILE/dispatches"
+          Write-Host ("Ejecutando script: {0}" -f $scriptPath)
+          powershell.exe -ExecutionPolicy Bypass -File $scriptPath
 
-        # Trigger next instance
-        Invoke-RestMethod -Uri $dispatchURL -Headers $commonHeaders -Method Post -Body $dispatchPayload -ContentType "application/json"
-
-        Log "Siguiente instancia de despliegue activada para $userRepo (workflow: $WORKFLOW_FILE)"
-    } catch {
-        Fail "Error al activar el siguiente despliegue: $_"
-    }
-}
-
-
-# === SHUTDOWN MONITOR (randomized log intervals) ===
-while ((Get-Date) -lt $shutdownTime) {
-    $now       = Get-Date
-    $elapsed   = [math]::Round(($now - $startTime).TotalMinutes, 1)
-    $remaining = [math]::Round(($endTime - $now).TotalMinutes, 1)
-    Log "Fase final: $elapsed min transcurridos | $remaining min hasta el apagado completo"
-
-    $waitMinutes = Get-Random -Minimum 15 -Maximum 30
-    Start-Sleep -Seconds ($waitMinutes * 60)
-}
-
-# === TERMINATION ===
-Log "Desmantelando instancia EnigMano $INSTANCE_ID"
-
-if ($RUNNER_ENV -eq "self-hosted") {
-    Stop-Computer -Force
-} else {
-    Log "Apagado omitido en entorno hospedado. Proceso finalizado."
-    Exit
-}
+      - name: 🏁 Finalizado
+        if: always()
+        shell: powershell
+        run: |
+          # script
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host 'Developer by Nex'
