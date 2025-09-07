@@ -101,18 +101,34 @@ try {
 
     if (Test-Path $wpPath) {
         # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
-        $defaultHive = 'HKU\DefaultUser'
+        $defaultHive = 'HKEY_USERS\DefaultUser'
         $defaultNt   = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
         try {
-            & reg.exe load $defaultHive "$defaultNt" | Out-Null
-            $defDesk = 'HKU:\DefaultUser\Control Panel\Desktop'
-            New-Item -Path 'HKU:\DefaultUser\Control Panel' -Name 'Desktop' -Force | Out-Null
-            Set-ItemProperty -Path $defDesk -Name Wallpaper -Value $wpPath
-            Set-ItemProperty -Path $defDesk -Name WallpaperStyle -Value 10
-            Set-ItemProperty -Path $defDesk -Name TileWallpaper -Value 0
+            & reg.exe load "$defaultHive" "$defaultNt" | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
             Log "Valores por defecto establecidos en el perfil base (Default)"
         } finally {
-            & reg.exe unload $defaultHive | Out-Null
+            & reg.exe unload "$defaultHive" | Out-Null
+        }
+
+        # Si el perfil de $Username ya existe, intente preconfigurarlo directamente usando su SID real
+        $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
+        if (Test-Path $userNt) {
+            try {
+                $sid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                $targetHive = "HKEY_USERS\$sid"
+                & reg.exe load "$targetHive" "$userNt" | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
+                Log "Perfil existente de $Username preconfigurado exitosamente (SID: $sid)"
+            } catch {
+                Log "No se pudo preconfigurar el hive de $Username: $($_.Exception.Message)"
+            } finally {
+                try { & reg.exe unload "$targetHive" | Out-Null } catch {}
+            }
         }
 
         # Crear carpeta Data en el Desktop del perfil por defecto (se heredara a Nex en primer logon)
