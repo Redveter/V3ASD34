@@ -15,13 +15,12 @@ if ([string]::IsNullOrWhiteSpace($InstanceLabel)) { $InstanceLabel = "Nex" }
 if ([string]::IsNullOrWhiteSpace($Username))      { $Username      = "Nex" }
 if ([string]::IsNullOrWhiteSpace($Password))      { $Password      = "Example#9943" }
 
-Write-Host "::add-mask::$Password"
 
 # === ASCII BANNER ===
 $now = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Host @"
 ----------------------------------------------------
-       ENIGMANO INSTANCIA $env:INSTANCE_ID — $InstanceLabel
+       ENIGMANO INSTANCIA $env:INSTANCE_ID - $InstanceLabel
 ----------------------------------------------------
    ESTADO     : Inicializando secuencia de despliegue
    USUARIO    : $Username
@@ -69,11 +68,11 @@ Log "Canal de transporte seguro iniciado"
          $currentName = (Get-ComputerInfo).CsName
          if ($currentName -ne $InstanceLabel) {
              Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
-             Log "Nombre del equipo establecido a '$InstanceLabel' (se aplicará tras reinicio)"
+            Log "Computer name set to '$InstanceLabel' (will apply after restart)"
          }
      }
  } catch {
-     Log "No se pudo cambiar el nombre del equipo en este entorno: $($_.Exception.Message)"
+     Log "Failed to change computer name in this environment: $($_.Exception.Message)"
  }
 
 # === REGION SCAN LOOP ===
@@ -84,7 +83,7 @@ $regionIndex = 0
 while (-not $tunnel) {
     $region = $regionList[$regionIndex]
     $regionIndex = ($regionIndex + 1) % $regionList.Count
-    Log "Explorando región operativa: $region"
+    Log "Explorando region operativa: $region"
 
     Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Process -FilePath .\ngrok.exe -ArgumentList "tcp --region $region 3389" -WindowStyle Hidden
@@ -98,7 +97,7 @@ while (-not $tunnel) {
             break
         }
     } catch {
-        Log "Fallo al consultar la región, cambiando a la siguiente zona..."
+        Log "Fallo al consultar la region, cambiando a la siguiente zona..."
     }
 
     Start-Sleep -Seconds 5
@@ -110,16 +109,16 @@ try {
     $dataFolderPath = Join-Path $desktopPath "Data"
     if (-not (Test-Path $dataFolderPath)) {
         New-Item -Path $dataFolderPath -ItemType Directory | Out-Null
-        Log "Bóveda de datos creada en $dataFolderPath"
+        Log "Boveda de datos creada en $dataFolderPath"
     } else {
-        Log "La bóveda de datos ya existe en $dataFolderPath"
+        Log "La boveda de datos ya existe en $dataFolderPath"
     }
 } catch {
-    Fail "Error al crear la bóveda de datos: $_"
+    Fail "Error al crear la boveda de datos: $_"
 }
 
 $tunnelClean = $tunnel -replace "^tcp://", ""
-Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContraseña: $Password"
+Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContrasena: $Password"
 
 # === TIMERS ===
 $totalMinutes    = 340
