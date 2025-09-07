@@ -7,10 +7,11 @@ on:
         description: "⌨️ Numero de instancia [1-10]:"
         required: true
         default: "1"
+        type: string
 
 jobs:
   deploy-enigmano:
-    name: "Instancia - [${{ github.event.inputs.INSTANCE }}]"
+    name: "Instancia - ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
 
     env:
@@ -24,6 +25,19 @@ jobs:
     steps:
       - name: 🦈 Checkout repo
         uses: actions/checkout@v4
+
+      - name: 🪙 Informacion del sistema
+        run: |
+          Write-Host "=== ENIGMANO RDP DEPLOYMENT ===" -ForegroundColor Green
+          Write-Host "Instance Number: $env:INSTANCE_ID" -ForegroundColor Yellow
+          Write-Host "Runner: $env:RUNNER_NAME" -ForegroundColor Yellow
+          Write-Host "Workflow: $env:GITHUB_WORKFLOW" -ForegroundColor Yellow
+          
+          # System specs
+          Write-Host "`n=== SYSTEM SPECIFICATIONS ===" -ForegroundColor Cyan
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory
+          Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+        
       - name: ⚙️ Parametros
         shell: powershell
         run: |
@@ -42,7 +56,6 @@ jobs:
         shell: powershell
         run: |
           # script
-          Write-Host 'Validacionando...'
           $ProgressPreference = 'SilentlyContinue'
           if (-not $env:NGROK_SHAHZAIB) {
             Write-Error 'Falta el token de Ngrok: NGROK_SHAHZAIB'
@@ -51,7 +64,8 @@ jobs:
           if (-not $env:SECRET_SHAHZAIB) {
             Write-Host 'ADVERTENCIA: SECRET_SHAHZAIB no esta configurado. Se omitira el encadenamiento de la siguiente instancia.'
           }
-          Write-Host 'Tokens verificados'
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host ' 📝 Tokens verificados'
 
       - name: 📦 Instalacion de software
         shell: powershell
@@ -94,8 +108,6 @@ jobs:
         shell: powershell
         run: |
           # script
-          $ProgressPreference = 'SilentlyContinue'
-          Write-Host 'Iniciando EnigMano-instance.ps1'
           powershell.exe -ExecutionPolicy Bypass -File ".\powershell\EnigMano-instance.ps1"
 
       - name: 🏁 Finalizado
