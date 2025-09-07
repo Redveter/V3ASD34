@@ -1,4 +1,4 @@
- name: "⚡ Despliegue de Instancia EnigMano"
+ name: "⚡ EnigMano Windows 11 Deployment"
 
 on:
   workflow_dispatch:
@@ -10,42 +10,42 @@ on:
 
 jobs:
   deploy-enigmano:
-    name: "🚀 Desplegar instancia EnigMano #${{ github.event.inputs.INSTANCE }}"
-    runs-on: windows-latest
+    name: "🚀 Deploy EnigMano Instance ${{ github.event.inputs.INSTANCE }}"
+    runs-on: windows-2025
 
     env:
       INSTANCE_ID: ${{ github.event.inputs.INSTANCE }}
       SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
       NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
       REPO: ${{ github.repository }}
-      WORKFLOW_FILE: "enigmano.yml"
+      WORKFLOW_FILE: "enigmano-Win-11.yml"
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: "📌 Parámetros del despliegue — Instancia #${{ env.INSTANCE_ID }}"
+      - name: 📌 Deployment Parameters
         shell: pwsh
         run: |
           $prevInstance = [int]$env:INSTANCE_ID - 1
-          Write-Host "════════════════════════════════════════════════"
-          Write-Host "🔹 Instancia EnigMano    : $env:INSTANCE_ID"
-          Write-Host "🔢 Instancia anterior    : $prevInstance"
-          Write-Host "📦 Repositorio de GitHub : $env:REPO"
-          Write-Host "🔁 Workflow de despliegue: $env:WORKFLOW_FILE"
-          Write-Host "🆔 ID de despliegue      : $env:DEPLOYMENT_ID"
-          Write-Host "════════════════════════════════════════════════"
+          Write-Host "==============================================="
+          Write-Host "🔹 EnigMano Instance     : $env:INSTANCE_ID"
+          Write-Host "🔢 Previous Instance     : $prevInstance"
+          Write-Host "📦 GitHub Repository     : $env:REPO"
+          Write-Host "🔁 Deployment Workflow   : $env:WORKFLOW_FILE"
+          Write-Host "🆔 Deployment ID         : $env:DEPLOYMENT_ID"
+          Write-Host "==============================================="
 
-      - name: 🔐 Validar secretos (GitHub y Ngrok)
+      - name: 🔐 Validate Secrets
         shell: pwsh
         run: |
           if (-not $env:SECRET_SHAHZAIB) {
-            Write-Error "❌ Falta el secreto de GitHub: SECRET_SHAHZAIB"
+            Write-Error "❌ Missing GitHub Secret: SECRET_SHAHZAIB"
             exit 1
           }
           if (-not $env:NGROK_SHAHZAIB) {
-            Write-Error "❌ Falta el token de autenticación de Ngrok: NGROK_SHAHZAIB"
+            Write-Error "❌ Missing Ngrok Auth Token: NGROK_SHAHZAIB"
             exit 1
           }
-          Write-Host "✅ Todos los secretos requeridos fueron validados correctamente"
+          Write-Host "✅ All required secrets validated successfully"
 
       # La generación de credenciales se realiza dentro del script PowerShell
 
@@ -73,36 +73,32 @@ jobs:
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           Write-Host "✅ Directiva aplicada. uBlock Origin se instalará cuando se inicie Brave." -ForegroundColor Green
 
-      - name: 📥 Descargar EnigMano-instance.ps1 (del repo actual)
+      - name: 📥 Download EnigMano-Instance.ps1
         shell: pwsh
         run: |
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
           $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
-          Write-Host "🌐 Descargando EnigMano-instance.ps1 desde:"
+          Write-Host "🌐 Downloading EnigMano-Instance.ps1 from:"
           Write-Host "   $url"
-          Invoke-WebRequest -Uri $url -OutFile "EnigMano-instance.ps1" -UseBasicParsing
-          if (!(Test-Path "./EnigMano-instance.ps1")) {
-            Write-Error "❌ No se pudo descargar EnigMano-instance.ps1 desde el repositorio actual ($repo)."
+          Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing
+          if (!(Test-Path "./EnigMano-Instance.ps1")) {
+            Write-Error "❌ Failed to download EnigMano-Instance.ps1"
             exit 1
           }
-          Write-Host "✅ EnigMano-instance.ps1 descargado correctamente"
+          Write-Host "✅ EnigMano-Instance.ps1 downloaded successfully"
 
-      - name: 🧭 Ejecutar script de instancia EnigMano
+      - name: ⚔️ Execute EnigMano Instance Script
         shell: pwsh
         run: |
-          Write-Host "🚦 Iniciando EnigMano-instance.ps1"
-          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-instance.ps1"
+          Write-Host "🚦 Initiating EnigMano-Instance.ps1"
+          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
 
-      - name: ✅ Estado final
+      - name: 💠 Final Status
         if: always()
         shell: pwsh
         run: |
-          Write-Host "════════════════════════════════════════════════"
-          Write-Host "🎉 Despliegue completado"
-          Write-Host " • Instancia    : $env:INSTANCE_ID"
-          Write-Host " • Detalles de acceso mostrados arriba (::notice)"
-          Write-Host "🔋 Impulsado por: SHAHZAIB-YT"
-          Write-Host "🏁 Despliegue de EnigMano ejecutado con precisión."
-          Write-Host "════════════════════════════════════════════════"
+          Write-Host "✅ EnigMano Instance $env:INSTANCE_ID completed execution."
+          Write-Host "🔋 Powered by: SHAHZAIB-YT"
+          Write-Host "🏁 EnigMano deployment executed with tactical precision."
