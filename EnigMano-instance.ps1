@@ -40,6 +40,7 @@ $NEXT_INSTANCE_ID = $INSTANCE_ID + 1
 $WORKFLOW_FILE   = "enigmano.yml"
 $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
+$WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
 
 # === TUNNEL SETUP ===
 Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
@@ -69,6 +70,68 @@ Log "Canal de transporte seguro iniciado"
  Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username -ErrorAction SilentlyContinue
  Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
  Log "Protocolos de acceso habilitados para la instancia"
+
+ # (Opcional) Restringir/Eliminar acceso del usuario por defecto de GitHub Actions (runneradmin)
+ try {
+     $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+     if ($runner) {
+         # Evitar acceso por RDP y deshabilitar la cuenta para que no pueda iniciar sesion futura
+         Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
+         Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+         Log "Usuario 'runneradmin' deshabilitado y removido del grupo de RDP"
+     } else {
+         Log "Usuario 'runneradmin' no existe en este entorno"
+     }
+ } catch {
+     Log "No se pudo modificar 'runneradmin': $($_.Exception.Message)"
+ }
+
+# === WALLPAPER (para el usuario de RDP) ===
+try {
+    Log "Configurando wallpaper para usuario '$Username'"
+
+    $wpRoot = "C:\\ProgramData\\EnigMano"
+    New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
+
+    $ext = [IO.Path]::GetExtension(([Uri]$WALLPAPER_URL).AbsolutePath)
+    if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.jpg' }
+    $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
+
+    try {
+        Invoke-WebRequest -Uri $WALLPAPER_URL -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
+        Log "Wallpaper descargado en $wpPath"
+    } catch {
+        Log "No se pudo descargar el wallpaper: $($_.Exception.Message)"
+    }
+
+    if (Test-Path $wpPath) {
+        # Política para aplicar a todos los usuarios (toma efecto en el siguiente logon)
+        $policyKey = "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+        New-Item -Path $policyKey -Force | Out-Null
+        Set-ItemProperty -Path $policyKey -Name "Wallpaper" -Value $wpPath -Type String -Force
+        New-ItemProperty -Path $policyKey -Name "WallpaperStyle" -Value "10" -PropertyType String -Force | Out-Null
+        Log "Política de wallpaper establecida para todos los usuarios"
+
+        # Tarea programada para aplicar en el primer inicio de sesion de $Username
+        $applyCmd = "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value '$wpPath'; " +
+                    "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value 10; " +
+                    "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value 0; " +
+                    "rundll32 user32.dll,UpdatePerUserSystemParameters 1,True"
+
+        $action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -Command \"$applyCmd\""
+        $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $Username
+        $principal = New-ScheduledTaskPrincipal -UserId $Username -LogonType InteractiveToken -RunLevel Highest
+
+        try {
+            Register-ScheduledTask -TaskName "EnigManoApplyWallpaper" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+            Log "Tarea programada 'EnigManoApplyWallpaper' registrada para el usuario $Username"
+        } catch {
+            Log "Fallo al registrar la tarea programada de wallpaper: $($_.Exception.Message)"
+        }
+    }
+} catch {
+    Log "Error general al configurar el wallpaper: $($_.Exception.Message)"
+}
 
  try {
      if ($InstanceLabel) {
