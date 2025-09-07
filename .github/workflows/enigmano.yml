@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy-enigmano:
-    name: "Instancia - ${{ github.event.inputs.INSTANCE }}"
+    name: "Instancia - [${{ github.event.inputs.INSTANCE }}]"
     runs-on: windows-latest
 
     env:
@@ -22,7 +22,7 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: 🍯 Checkout repo
+      - name: 🦈 Checkout repo
         uses: actions/checkout@v4
       - name: ⚙️ Parametros
         shell: powershell
@@ -90,6 +90,35 @@ jobs:
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
+      - name: 🧩 Asegurar script EnigMano
+        shell: powershell
+        run: |
+          # script
+          $ProgressPreference = 'SilentlyContinue'
+          $scriptPath = ".\powershell\EnigMano-instance.ps1"
+          if (-not (Test-Path $scriptPath)) {
+            Write-Host ("Script no encontrado en {0}. Intentando descargar..." -f $scriptPath)
+            $branch = if ([string]::IsNullOrWhiteSpace($env:GITHUB_REF_NAME)) { 'main' } else { $env:GITHUB_REF_NAME }
+            $rawBase = "https://raw.githubusercontent.com/$($env:REPO)/$branch"
+            $urls = @(
+              "$rawBase/powershell/EnigMano-instance.ps1",
+              "$rawBase/EnigMano-instance.ps1",
+              "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
+            )
+            foreach ($u in $urls) {
+              try {
+                Write-Host ("Probando: {0}" -f $u)
+                New-Item -ItemType Directory -Force -Path (Split-Path $scriptPath) | Out-Null
+                Invoke-WebRequest -Uri $u -OutFile $scriptPath -UseBasicParsing -ErrorAction Stop
+                break
+              } catch {}
+            }
+            if (-not (Test-Path $scriptPath)) {
+              Write-Error 'No se pudo obtener EnigMano-instance.ps1'
+              exit 1
+            }
+          }
+
       - name: ⚡ Ejecucion del script
         shell: powershell
         run: |
@@ -102,4 +131,6 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Write-Host "Developer by 🐳 Nex"
+          # script
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "Developer by 🐳 ᯓ★ Nex ★🪽"
