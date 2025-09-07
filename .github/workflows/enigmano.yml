@@ -1,4 +1,4 @@
-name: "⚡ EnigMano Windows 11 Deployment"
+name: "⚡ Despliegue de EnigMano Windows 11"
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy-enigmano:
-    name: "🚀 Deploy EnigMano Instance ${{ github.event.inputs.INSTANCE }}"
+    name: "🚀 Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
 
     env:
@@ -22,82 +22,114 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: 📌 Deployment Parameters
+      - name: Parámetros del despliegue
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Clear-Host
           $prevInstance = [int]$env:INSTANCE_ID - 1
+          Write-Host "::group::Parámetros del despliegue"
           Write-Host "==============================================="
-          Write-Host "🔹 EnigMano Instance     : $env:INSTANCE_ID"
-          Write-Host "🔢 Previous Instance     : $prevInstance"
-          Write-Host "📦 GitHub Repository     : $env:REPO"
-          Write-Host "🔁 Deployment Workflow   : $env:WORKFLOW_FILE"
-          Write-Host "🆔 Deployment ID         : $env:DEPLOYMENT_ID"
+          Write-Host "Instancia EnigMano      : $env:INSTANCE_ID"
+          Write-Host "Instancia anterior      : $prevInstance"
+          Write-Host "Repositorio de GitHub   : $env:REPO"
+          Write-Host "Workflow de despliegue  : $env:WORKFLOW_FILE"
+          Write-Host "ID de despliegue        : $env:DEPLOYMENT_ID"
           Write-Host "==============================================="
+          Write-Host "::endgroup::"
 
-      - name: 🔐 Validate Secrets
+      - name: Validar secretos
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Validación de secretos"
           if (-not $env:NGROK_SHAHZAIB) {
-            Write-Error "❌ Missing Ngrok Auth Token: NGROK_SHAHZAIB"
+            Write-Error "[ERROR] Falta el token de Ngrok: NGROK_SHAHZAIB"
             exit 1
           }
           if (-not $env:SECRET_SHAHZAIB) {
-            Write-Host "⚠️ Optional: SECRET_SHAHZAIB not set. Next-instance dispatch will be skipped."
+            Write-Host "[WARN] SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
           }
-          Write-Host "✅ Secrets validation completed"
+          Write-Host "[OK] Validación de secretos completada"
+          Write-Host "::endgroup::"
 
-      # La generación de credenciales se realiza dentro del script PowerShell
-
-      - name: 📦 Instalar software con Chocolatey (Brave, WinRAR, Notepad++)
+      - name: Instalar software con Chocolatey (Brave, WinRAR, Notepad++)
         shell: pwsh
         run: |
-          Write-Host "📥 Instalando Chocolatey y aplicaciones..." -ForegroundColor Green
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Instalación de software"
+          Write-Host "[INFO] Preparando Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          choco --version | Out-Host
 
-          choco --version
+          function Install-App {
+            param([string]$Id,[string]$Nombre)
+            choco install $Id -y --no-progress
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "[OK] $Nombre instalado"
+            } else {
+              Write-Host "[SKIP] $Nombre ya estaba instalado u omitido (código $LASTEXITCODE)"
+            }
+          }
 
-          # Instalar aplicaciones (idempotente)
-          choco install brave -y --no-progress || Write-Host "ℹ️ Instalación de Brave omitida (posiblemente ya instalado)."
-          choco install winrar -y --no-progress || Write-Host "ℹ️ Instalación de WinRAR omitida (posiblemente ya instalado)."
-          choco install notepadplusplus -y --no-progress || Write-Host "ℹ️ Instalación de Notepad++ omitida (posiblemente ya instalado)."
+          Install-App -Id 'brave' -Nombre 'Brave'
+          Install-App -Id 'winrar' -Nombre 'WinRAR'
+          Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
+          Write-Host "::endgroup::"
 
-      - name: 🧩 Forzar instalación de uBlock Origin en Brave
+      - name: Forzar instalación de uBlock Origin en Brave
         shell: pwsh
         run: |
-          Write-Host "🛡️ Configurando directiva para forzar la instalación de uBlock Origin en Brave..." -ForegroundColor Green
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Política para uBlock Origin (Brave)"
+          Write-Host "[INFO] Configurando directiva para forzar la instalación de uBlock Origin en Brave..."
           $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
           New-Item -Path $policyPath -Force | Out-Null
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          Write-Host "✅ Directiva aplicada. uBlock Origin se instalará cuando se inicie Brave." -ForegroundColor Green
+          Write-Host "[OK] Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
+          Write-Host "::endgroup::"
 
-      - name: 📥 Download EnigMano-Instance.ps1
+      - name: Descargar EnigMano-Instance.ps1
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Descarga del script EnigMano"
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
-          $url = "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
-          Write-Host "🌐 Downloading EnigMano-Instance.ps1 from:"
-          Write-Host "   $url"
-          Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing
-          if (!(Test-Path "./EnigMano-Instance.ps1")) {
-            Write-Error "❌ Failed to download EnigMano-Instance.ps1"
+          $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
+          Write-Host "[INFO] Origen: $url"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop
+          } catch {
+            Write-Error "[ERROR] Error al descargar EnigMano-Instance.ps1: $($_.Exception.Message)"
             exit 1
           }
-          Write-Host "✅ EnigMano-Instance.ps1 downloaded successfully"
+          if (!(Test-Path "./EnigMano-Instance.ps1")) {
+            Write-Error "[ERROR] No se encontró el archivo descargado EnigMano-Instance.ps1"
+            exit 1
+          }
+          Write-Host "[OK] EnigMano-Instance.ps1 descargado"
+          Write-Host "::endgroup::"
 
-      - name: ⚔️ Execute EnigMano Instance Script
+      - name: Ejecutar script de instancia EnigMano
         shell: pwsh
         run: |
-          Write-Host "🚦 Initiating EnigMano-Instance.ps1"
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Ejecución del script"
+          Write-Host "[INFO] Iniciando EnigMano-Instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
+          Write-Host "::endgroup::"
 
-      - name: 💠 Final Status
+      - name: Estado final
         if: always()
         shell: pwsh
         run: |
-          Write-Host "✅ EnigMano Instance $env:INSTANCE_ID completed execution."
-          Write-Host "🔋 Powered by: SHAHZAIB-YT"
-          Write-Host "🏁 EnigMano deployment executed with tactical precision."
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host "::group::Estado final"
+          Write-Host "[OK] Instancia EnigMano $env:INSTANCE_ID finalizada"
+          Write-Host "[INFO] Impulsado por: SHAHZAIB-YT"
+          Write-Host "[OK] Despliegue ejecutado con precisión"
+          Write-Host "::endgroup::"
