@@ -22,6 +22,8 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
+      - name: 🍯 Checkout repo
+        uses: actions/checkout@v4
       - name: ⚙️ Parametros
         shell: powershell
         run: |
@@ -40,7 +42,7 @@ jobs:
         shell: powershell
         run: |
           # script
-          Write-Host 'Validacion de secretos'
+          Write-Host 'Validacionando...'
           $ProgressPreference = 'SilentlyContinue'
           if (-not $env:NGROK_SHAHZAIB) {
             Write-Error 'Falta el token de Ngrok: NGROK_SHAHZAIB'
@@ -49,7 +51,7 @@ jobs:
           if (-not $env:SECRET_SHAHZAIB) {
             Write-Host 'ADVERTENCIA: SECRET_SHAHZAIB no esta configurado. Se omitira el encadenamiento de la siguiente instancia.'
           }
-          Write-Host 'Secretos verificados'
+          Write-Host 'Tokens verificados'
 
       - name: 📦 Instalacion de software
         shell: powershell
