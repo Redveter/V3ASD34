@@ -1,4 +1,4 @@
-name: "Despliegue de EnigMano Windows 11"
+name: "🏢 Despliegue Windows 11"
 
 on:
   workflow_dispatch:
@@ -24,6 +24,7 @@ jobs:
     steps:
       - shell: powershell
         run: |
+        name: Parametros del despliegue
           Write-Host 'Parametros del despliegue'
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
