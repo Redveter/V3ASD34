@@ -24,48 +24,48 @@ jobs:
     steps:
       - shell: powershell
         run: |
-          echo "📋 Parámetros del despliegue"
+          Write-Host '📋 Parámetros del despliegue'
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
-          echo "==============================================="
-          echo "🔢 Instancia EnigMano    : $env:INSTANCE_ID"
-          echo "↩️  Instancia anterior   : $prevInstance"
-          echo "📦 Repositorio           : $env:REPO"
-          echo "📋 Workflow              : $env:WORKFLOW_FILE"
-          echo "🆔 ID de despliegue      : $env:DEPLOYMENT_ID"
-          echo "==============================================="
+          Write-Host '==============================================='
+          Write-Host ("🔢 Instancia EnigMano    : {0}" -f $env:INSTANCE_ID)
+          Write-Host ("↩️  Instancia anterior   : {0}" -f $prevInstance)
+          Write-Host ("📦 Repositorio           : {0}" -f $env:REPO)
+          Write-Host ("📋 Workflow              : {0}" -f $env:WORKFLOW_FILE)
+          Write-Host ("🆔 ID de despliegue      : {0}" -f $env:DEPLOYMENT_ID)
+          Write-Host '==============================================='
 
       - shell: powershell
         run: |
-          echo "🔐 Validación de secretos"
+          Write-Host '🔐 Validación de secretos'
           $ProgressPreference = 'SilentlyContinue'
           if (-not $env:NGROK_SHAHZAIB) {
-            Write-Error "❌ Falta el token de Ngrok: NGROK_SHAHZAIB"
+            Write-Error '❌ Falta el token de Ngrok: NGROK_SHAHZAIB'
             exit 1
           }
           if (-not $env:SECRET_SHAHZAIB) {
-            echo "⚠️  SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
+            Write-Host '⚠️  SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia.'
           }
-          echo "✅ Secretos verificados"
+          Write-Host '✅ Secretos verificados'
 
       - shell: powershell
         run: |
-          echo "📦 Instalación de software"
+          Write-Host '📦 Instalación de software'
           $ProgressPreference = 'SilentlyContinue'
-          echo "📥 Preparando Chocolatey..."
+          Write-Host '📥 Preparando Chocolatey...'
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
           choco --version *> $null
-          echo "📦 Chocolatey listo"
+          Write-Host '📦 Chocolatey listo'
 
           function Install-App {
             param([string]$Id,[string]$Nombre)
             choco install $Id -y --no-progress *> $null
             $code = $LASTEXITCODE
-            if ($code -in 0,3010) { echo "✅ $Nombre instalado" }
-            elseif ($code -eq 0)  { echo "✅ $Nombre instalado" }
-            else { echo "⚠️  $Nombre pudo no instalarse correctamente (código $code)" }
+            if ($code -in 0,3010) { Write-Host ("✅ {0} instalado" -f $Nombre) }
+            elseif ($code -eq 0)  { Write-Host ("✅ {0} instalado" -f $Nombre) }
+            else { Write-Host ("⚠️  {0} pudo no instalarse correctamente (código {1})" -f $Nombre,$code) }
           }
 
           Install-App -Id 'brave' -Nombre 'Brave'
@@ -74,47 +74,47 @@ jobs:
 
       - shell: powershell
         run: |
-          echo "🛡️ Política uBlock Origin (Brave)"
+          Write-Host '🛡️ Política uBlock Origin (Brave)'
           $ProgressPreference = 'SilentlyContinue'
-          echo "📋 Aplicando directiva para forzar la instalación de uBlock Origin en Brave..."
+          Write-Host '📋 Aplicando directiva para forzar la instalación de uBlock Origin en Brave...'
           $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
           New-Item -Path $policyPath -Force | Out-Null
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          echo "✅ Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
+          Write-Host '✅ Directiva aplicada. uBlock Origin se instalará al iniciar Brave.'
 
       - shell: powershell
         run: |
-          echo "⬇️ Descarga del script EnigMano"
+          Write-Host '⬇️ Descarga del script EnigMano'
           $ProgressPreference = 'SilentlyContinue'
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
           $url = "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
-          echo "🔗 Origen: $url"
+          Write-Host ("🔗 Origen: {0}" -f $url)
           try {
             Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop *> $null
           } catch {
-            Write-Error "❌ Error al descargar EnigMano-Instance.ps1: $($_.Exception.Message)"
+            Write-Error ("❌ Error al descargar EnigMano-Instance.ps1: {0}" -f $_.Exception.Message)
             exit 1
           }
           if (!(Test-Path "./EnigMano-Instance.ps1")) {
-            Write-Error "❌ No se encontró el archivo descargado EnigMano-Instance.ps1"
+            Write-Error '❌ No se encontró el archivo descargado EnigMano-Instance.ps1'
             exit 1
           }
-          echo "✅ EnigMano-Instance.ps1 descargado"
+          Write-Host '✅ EnigMano-Instance.ps1 descargado'
 
       - shell: powershell
         run: |
-          echo "🚀 Ejecución del script"
+          Write-Host '🚀 Ejecución del script'
           $ProgressPreference = 'SilentlyContinue'
-          echo "▶️  Iniciando EnigMano-Instance.ps1"
+          Write-Host '▶️  Iniciando EnigMano-Instance.ps1'
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
 
       - if: always()
         shell: powershell
         run: |
-          echo "🏁 Estado final"
+          Write-Host '🏁 Estado final'
           $ProgressPreference = 'SilentlyContinue'
-          echo "✅ Instancia EnigMano $env:INSTANCE_ID finalizada"
-          echo "🔋 Impulsado por: SHAHZAIB-YT"
-          echo "✅ Despliegue ejecutado con precisión"
+          Write-Host ("✅ Instancia EnigMano {0} finalizada" -f $env:INSTANCE_ID)
+          Write-Host '🔋 Impulsado por: SHAHZAIB-YT'
+          Write-Host '✅ Despliegue ejecutado con precisión'
