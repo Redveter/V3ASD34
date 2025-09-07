@@ -116,7 +116,7 @@ jobs:
           $themeDir = "$env:APPDATA\Microsoft\Windows\Themes"
           New-Item -Path $themeDir -ItemType Directory -Force | Out-Null
 
-          $imgUrl  = "https://static0.gamerantimages.com/wordpress/wp-content/uploads/wm/2025/06/hollow-knight-silksong-hornet-close-up-over-gameplay-screenshot.jpg"
+          $imgUrl  = "https://rare-gallery.com/mocahbig/1377126-hollow-knight-silksong-game-4k-pc-wallpaper.jpg"
           $imgPath = Join-Path $themeDir "wallpaper.jpg"
           Invoke-WebRequest -Uri $imgUrl -OutFile $imgPath -UseBasicParsing -ErrorAction Stop
 
