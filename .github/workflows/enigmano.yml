@@ -24,7 +24,7 @@ jobs:
     steps:
       - shell: powershell
         run: |
-          🏢 Parametros del despliegue
+          Write-Host 'Parametros del despliegue'
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
           Write-Host '==============================================='
