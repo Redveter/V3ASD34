@@ -1,0 +1,166 @@
+name: Nex Instance Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_number:
+        description: 'Número de instancia (1-10)'
+        required: true
+        default: '1'
+        type: string
+
+jobs:
+  deploy-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: System Information
+      run: |
+        Write-Host "=== Implementación de Nex RDP ===" -ForegroundColor Green
+        Write-Host "Número de instancia: ${{ github.event.inputs.instance_number }}" -ForegroundColor Yellow
+        Write-Host "Ejecutor: $env:RUNNER_NAME" -ForegroundColor Yellow
+        Write-Host "Flujo de trabajo: $env:GITHUB_WORKFLOW" -ForegroundColor Yellow
+        
+        # System specs
+        Write-Host "`n=== ESPECIFICACIONES DEL SISTEMA ===" -ForegroundColor Cyan
+        Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory
+        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+        
+    - name: Enable RDP
+      run: |
+        Write-Host "Habilitando Escritorio Remoto..." -ForegroundColor Green
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        
+    - name: Create User Account
+      run: |
+        Write-Host "Configurando cuenta de usuario..." -ForegroundColor Green
+        $Password = ConvertTo-SecureString "P@ssw0rd!" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $Password
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+        Write-Host "Usuario: runneradmin" -ForegroundColor Yellow
+        Write-Host "Contraseña: P@ssw0rd!" -ForegroundColor Yellow
+        
+    - name: Download and Setup ngrok
+      run: |
+        Write-Host "Descargando ngrok..." -ForegroundColor Green
+        Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+        Expand-Archive ngrok.zip -DestinationPath C:\ngrok
+        
+    - name: Configure ngrok
+      run: |
+        Write-Host "Configurando ngrok..." -ForegroundColor Green
+        C:\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_NEV }}
+        
+    - name: Install Essential Software
+      run: |
+        Write-Host "Instalando software esencial..." -ForegroundColor Green
+        
+        # Install Chocolatey
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        
+        # Install Chrome
+        choco install googlechrome -y
+        
+        # Install 7-Zip
+        choco install 7zip -y
+        
+        # Install Notepad++
+        choco install notepadplusplus -y
+        
+        # Install WinRAR
+        choco install winrar -y
+        
+        Write-Host "¡Instalación de software completada!" -ForegroundColor Green
+        
+    - name: Configure Chrome Extensions
+      run: |
+        Write-Host "Configurando Chrome con extensiones de seguridad..." -ForegroundColor Green
+        
+        # Create Chrome preferences for extensions
+        $ChromePrefs = @"
+{
+  "extensions": {
+    "settings": {
+      "cjpalhdlnbpafiamejdnhcphjbkeiagm": {
+        "state": 1,
+        "was_installed_by_default": false,
+        "was_installed_by_oem": false,
+        "was_installed_by_custodian": false,
+        "creation_flags": 1,
+        "location": 1,
+        "manifest": {
+          "name": "uBlock Origin",
+          "version": "1.0"
+        }
+      }
+    }
+  }
+}
+"@
+        
+        $ChromeDir = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+        if (!(Test-Path $ChromeDir)) {
+          New-Item -ItemType Directory -Path $ChromeDir -Force
+        }
+        
+        $ChromePrefs | Out-File -FilePath "$ChromeDir\Preferences" -Encoding UTF8
+        
+    - name: Setup Cloudflare WARP
+      run: |
+        Write-Host "Configurando Cloudflare WARP..." -ForegroundColor Green
+        try {
+          Invoke-WebRequest -Uri "https://downloads.cloudflareclient.com/v1/download/windows/ga" -OutFile "CloudflareWARP.msi"
+          Start-Process msiexec.exe -Wait -ArgumentList '/I CloudflareWARP.msi /quiet'
+          Write-Host "¡Cloudflare WARP instalado correctamente!" -ForegroundColor Green
+        } catch {
+          Write-Host "Falló la instalación de Cloudflare WARP, continuando..." -ForegroundColor Yellow
+        }
+        
+    - name: Start ngrok Tunnel
+      run: |
+        Write-Host "Iniciando túnel de ngrok..." -ForegroundColor Green
+        Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389" -WindowStyle Hidden
+        Start-Sleep -Seconds 10
+        
+    - name: Get Connection Details
+      run: |
+        Write-Host "`n=== DETALLES DE CONEXIÓN ===" -ForegroundColor Green
+        try {
+          $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+          $publicUrl = $ngrokApi.tunnels[0].public_url
+          $host = $publicUrl -replace "tcp://", ""
+          
+          Write-Host "╔══════════════════════════════════════╗" -ForegroundColor Cyan
+          Write-Host "║         Acceso Nex RDP           ║" -ForegroundColor Cyan  
+          Write-Host "╠══════════════════════════════════════╣" -ForegroundColor Cyan
+          Write-Host "║ Host: $host" -ForegroundColor White
+          Write-Host "║ Usuario: runneradmin                 ║" -ForegroundColor White
+          Write-Host "║ Contraseña: P@ssw0rd!                ║" -ForegroundColor White
+          Write-Host "╚══════════════════════════════════════╝" -ForegroundColor Cyan
+          
+          Write-Host "`nInstrucciones de conexión:" -ForegroundColor Yellow
+          Write-Host "1. Abra Conexión a Escritorio Remoto" -ForegroundColor White
+          Write-Host "2. Introduzca la dirección del host arriba" -ForegroundColor White
+          Write-Host "3. Use las credenciales proporcionadas" -ForegroundColor White
+          Write-Host "4. IMPORTANTE: Minimice (no cierre) esta ventana para mantener la conexión activa!" -ForegroundColor Red
+          
+        } catch {
+          Write-Host "Error al obtener detalles de ngrok. Verificando manualmente..." -ForegroundColor Red
+          Start-Sleep -Seconds 5
+          try {
+            $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+            $publicUrl = $ngrokApi.tunnels[0].public_url
+            Write-Host "Verificación manual - URL de ngrok: $publicUrl" -ForegroundColor Green
+          } catch {
+            Write-Host "API de ngrok no accesible. Por favor, verifique el estado de ngrok manualmente." -ForegroundColor Red
+          }
+        }
+        
