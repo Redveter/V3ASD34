@@ -101,7 +101,7 @@ try {
 
     if (Test-Path $wpPath) {
         # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
-        $defaultHive = 'HKU\\DefaultUser'
+        $defaultHive = 'HKU\DefaultUser'
         $defaultNt   = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
         try {
             & reg.exe load $defaultHive "$defaultNt" | Out-Null
@@ -113,6 +113,21 @@ try {
             Log "Valores por defecto establecidos en el perfil base (Default)"
         } finally {
             & reg.exe unload $defaultHive | Out-Null
+        }
+
+        # Crear carpeta Data en el Desktop del perfil por defecto (se heredara a Nex en primer logon)
+        $defaultDesktop = Join-Path $env:SystemDrive 'Users\Default\Desktop'
+        try { New-Item -Path (Join-Path $defaultDesktop 'Data') -ItemType Directory -Force | Out-Null } catch {}
+
+        # Enforzar por politica para todos los usuarios (adicional a Default)
+        try {
+            $sysPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+            New-Item -Path $sysPolicy -Force | Out-Null
+            Set-ItemProperty -Path $sysPolicy -Name 'Wallpaper' -Value $wpPath -Type String -Force
+            New-ItemProperty -Path $sysPolicy -Name 'WallpaperStyle' -Value '10' -PropertyType String -Force | Out-Null
+            Log "Politica de Wallpaper establecida en HKLM (todos los usuarios)"
+        } catch {
+            Log "No se pudo establecer politica HKLM de wallpaper: $($_.Exception.Message)"
         }
 
         # No aplicar en HKCU aqui para evitar afectar al contexto del runner; Nex lo heredara al iniciar sesion
