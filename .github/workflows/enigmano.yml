@@ -1,16 +1,16 @@
-name: "🏢 Despliegue Windows 11"
+name: "🏢 Windows 11 - RPD"
 
 on:
   workflow_dispatch:
     inputs:
       INSTANCE:
-        description: "Numero de instancia a desplegar (p. ej., 1, 2, 3...)"
+        description: "Numero de instancia:"
         required: true
         default: "1"
 
 jobs:
   deploy-enigmano:
-    name: "Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
+    name: "Desplegar instancia EnigMano AAAAA ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
 
     env:
