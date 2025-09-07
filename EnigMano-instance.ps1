@@ -86,7 +86,7 @@ Log "Canal de transporte seguro iniciado"
      Log "No se pudo modificar 'runneradmin': $($_.Exception.Message)"
  }
 
-# === WALLPAPER (para el usuario de RDP) ===
+# === WALLPAPER (aplicacion al iniciar sesion del usuario) ===
 try {
     Log "Configurando wallpaper para usuario '$Username'"
 
@@ -105,29 +105,16 @@ try {
     }
 
     if (Test-Path $wpPath) {
-        # Política para aplicar a todos los usuarios (toma efecto en el siguiente logon)
-        $policyKey = "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
-        New-Item -Path $policyKey -Force | Out-Null
-        Set-ItemProperty -Path $policyKey -Name "Wallpaper" -Value $wpPath -Type String -Force
-        New-ItemProperty -Path $policyKey -Name "WallpaperStyle" -Value "10" -PropertyType String -Force | Out-Null
-        Log "Política de wallpaper establecida para todos los usuarios"
+        $startupDir = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+        New-Item -Path $startupDir -ItemType Directory -Force | Out-Null
+        $cmdPath = Join-Path $startupDir "ApplyEnigManoWallpaper.cmd"
 
-        # Tarea programada para aplicar en el primer inicio de sesion de $Username
-        $applyCmd = "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value '$wpPath'; " +
-                    "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value 10; " +
-                    "Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value 0; " +
-                    "rundll32 user32.dll,UpdatePerUserSystemParameters 1,True"
+        $cmd = "@echo off`r`n" +
+               "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value '$wpPath'; Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value 10; Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value 0; rundll32 user32.dll,UpdatePerUserSystemParameters 1,True\"`r`n" +
+               "del \"%~f0\" >nul 2>&1`r`n"
 
-        $action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -Command \"$applyCmd\""
-        $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $Username
-        $principal = New-ScheduledTaskPrincipal -UserId $Username -LogonType InteractiveToken -RunLevel Highest
-
-        try {
-            Register-ScheduledTask -TaskName "EnigManoApplyWallpaper" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
-            Log "Tarea programada 'EnigManoApplyWallpaper' registrada para el usuario $Username"
-        } catch {
-            Log "Fallo al registrar la tarea programada de wallpaper: $($_.Exception.Message)"
-        }
+        Set-Content -Path $cmdPath -Value $cmd -Encoding ASCII
+        Log "Script de inicio creado: $cmdPath (se auto-eliminara tras aplicarse)"
     }
 } catch {
     Log "Error general al configurar el wallpaper: $($_.Exception.Message)"
