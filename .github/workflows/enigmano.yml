@@ -37,7 +37,7 @@ jobs:
           Write-Host '==============================================='
 
       - name: 🔐 Validacion tokens
-      - shell: powershell
+        shell: powershell
         run: |
           # script
           Write-Host 'Validacion de secretos'
@@ -52,7 +52,7 @@ jobs:
           Write-Host 'Secretos verificados'
 
       - name: 📦 Instalacion de software
-      - shell: powershell
+        shell: powershell
         run: |
           # script
           Write-Host 'Instalacion de software'
@@ -78,7 +78,7 @@ jobs:
           Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
 
       - name: 📦 Extensión - uBlock Origin (Brave)
-      - shell: powershell
+        shell: powershell
         run: |
           Write-Host 'Politica uBlock Origin (Brave)'
           $ProgressPreference = 'SilentlyContinue'
@@ -89,7 +89,7 @@ jobs:
           Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
       - name: 📡 Descargando script
-      - shell: powershell
+        shell: powershell
         run: |
           Write-Host 'Descarga del script EnigMano'
           $ProgressPreference = 'SilentlyContinue'
@@ -111,7 +111,7 @@ jobs:
           Write-Host 'EnigMano-Instance.ps1 descargado'
 
       - name: ⚡ Ejecucion del script
-      - shell: powershell
+        shell: powershell
         run: |
           Write-Host 'Ejecucion del script'
           $ProgressPreference = 'SilentlyContinue'
