@@ -123,9 +123,9 @@ try {
                 & reg.exe add "$targetHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
                 & reg.exe add "$targetHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
                 & reg.exe add "$targetHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
-                Log "Perfil existente de $Username preconfigurado exitosamente (SID: $sid)"
+                Log ("Perfil existente de {0} preconfigurado exitosamente (SID: {1})" -f $Username, $sid)
             } catch {
-                Log "No se pudo preconfigurar el hive de $Username: $($_.Exception.Message)"
+                Log ("No se pudo preconfigurar el hive de {0}: {1}" -f $Username, $_.Exception.Message)
             } finally {
                 try { & reg.exe unload "$targetHive" | Out-Null } catch {}
             }
