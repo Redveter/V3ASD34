@@ -88,65 +88,13 @@ jobs:
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
-      - name: 📡 Descargando script
-        shell: powershell
-        run: |
-          Write-Host 'Descarga del script EnigMano'
-          $ProgressPreference = 'SilentlyContinue'
-          $repo = "$env:REPO"
-          $branch = $env:GITHUB_REF_NAME
-          if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
-          $url = "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
-          Write-Host ("Origen: {0}" -f $url)
-          try {
-            Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop *> $null
-          } catch {
-            Write-Error ("Error al descargar EnigMano-Instance.ps1: {0}" -f $_.Exception.Message)
-            exit 1
-          }
-          if (!(Test-Path "./EnigMano-Instance.ps1")) {
-            Write-Error 'No se encontro el archivo descargado EnigMano-Instance.ps1'
-            exit 1
-          }
-          Write-Host 'EnigMano-Instance.ps1 descargado'
-
       - name: ⚡ Ejecucion del script
-        shell: powershell
-        run: |
-          Write-Host 'Ejecucion del script'
-          $ProgressPreference = 'SilentlyContinue'
-          Write-Host 'Iniciando EnigMano-Instance.ps1'
-          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
-
-      - name: 🖥️ Acceso Nex RDP
         shell: powershell
         run: |
           # script
           $ProgressPreference = 'SilentlyContinue'
-          $address  = if ($env:RDP_HOST) { $env:RDP_HOST } else { 'desconocido' }
-          $port     = if ($env:RDP_PORT) { $env:RDP_PORT } else { '3389' }
-          $user     = if ($env:RDP_USER) { $env:RDP_USER } else { 'Nex' }
-          $pass     = if ($env:RDP_PASSWORD) { $env:RDP_PASSWORD } else { 'P@ssw0rd!' }
-          $protocol = if ($env:RDP_PROTOCOL) { $env:RDP_PROTOCOL } else { 'RDP' }
-
-          $w = 40  # ancho interior del recuadro
-
-          function Write-Line([string]$text, [string]$color='White') {
-            if ($null -eq $text) { $text = '' }
-            if ($text.Length -gt $w) { $text = $text.Substring(0, $w) }
-            $pad = ' ' * ($w - $text.Length)
-            Write-Host ("║ {0}{1} ║" -f $text, $pad) -ForegroundColor $color
-          }
-
-          Write-Host ("╔{0}╗" -f ('═' * ($w + 2))) -ForegroundColor Cyan
-          Write-Line 'Acceso Nex RDP' 'Cyan'
-          Write-Host ("╠{0}╣" -f ('═' * ($w + 2))) -ForegroundColor Cyan
-          Write-Line 'Estado: CONECTADO' 'Green'
-          Write-Line ("Host: {0}:{1}" -f $address,$port)
-          Write-Line ("Usuario: {0}" -f $user)
-          Write-Line ("Contraseña: {0}" -f $pass)
-          Write-Line ("Protocolo: {0}" -f $protocol.ToUpper())
-          Write-Host ("╚{0}╝" -f ('═' * ($w + 2))) -ForegroundColor Cyan
+          Write-Host 'Iniciando EnigMano-instance.ps1'
+          powershell.exe -ExecutionPolicy Bypass -File ".\powershell\EnigMano-instance.ps1"
 
       - if: always()
         name: 🏁 Final
