@@ -84,11 +84,25 @@ Log "Canal de transporte seguro iniciado"
  Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
  Log "Protocolos de acceso habilitados para la instancia"
 
+ # Identidad de sesion actual y del usuario destino (para trazabilidad)
+ try {
+     $currUser = $env:USERNAME
+     $currSid  = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+     Log ("Sesion actual -> Usuario: {0} | SID: {1}" -f $currUser, $currSid)
+ } catch {}
+
+ try {
+     $targetSid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+     Log ("Usuario destino -> {0} | SID: {1}" -f $Username, $targetSid)
+ } catch {
+     Log ("No se pudo resolver SID de {0}: {1}" -f $Username, $_.Exception.Message)
+ }
+
 # === WALLPAPER (estilo personalize.ps1, sin tareas ni lanzadores) ===
 try {
-    Log "Aplicando wallpaper al estilo personalize.ps1 (preconfiguracion para Nex)"
+    Log ("Aplicando wallpaper al estilo personalize.ps1 (preconfiguracion para {0})" -f $Username)
 
-    $wpRoot = "C:\\ProgramData\\EnigMano"
+    $wpRoot = "C:\\Users\\Public\\$Username"
     New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
 
     $ext = [IO.Path]::GetExtension(([Uri]$WALLPAPER_URL).AbsolutePath)
@@ -137,7 +151,7 @@ try {
 
         # Enforzar por politica para todos los usuarios (adicional a Default)
         try {
-            $sysPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+            $sysPolicy = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System'
             New-Item -Path $sysPolicy -Force | Out-Null
             Set-ItemProperty -Path $sysPolicy -Name 'Wallpaper' -Value $wpPath -Type String -Force
             New-ItemProperty -Path $sysPolicy -Name 'WallpaperStyle' -Value '10' -PropertyType String -Force | Out-Null
@@ -146,7 +160,31 @@ try {
             Log "No se pudo establecer politica HKLM de wallpaper: $($_.Exception.Message)"
         }
 
-        # No aplicar en HKCU aqui para evitar afectar al contexto del runner; Nex lo heredara al iniciar sesion
+        # Si el script corre ya en la sesion de destino ($Username), aplicar de inmediato en HKCU
+        try {
+            if ($env:USERNAME -and ($env:USERNAME -ieq $Username)) {
+                $themes     = Join-Path $env:APPDATA 'Microsoft\\Windows\\Themes'
+                $transcoded = Join-Path $themes 'TranscodedWallpaper'
+                New-Item -Path $themes -ItemType Directory -Force | Out-Null
+                Copy-Item -Path $wpPath -Destination $transcoded -Force
+
+                $reg = 'HKCU:\\Control Panel\\Desktop'
+                Set-ItemProperty -Path $reg -Name Wallpaper -Value $transcoded
+                Set-ItemProperty -Path $reg -Name WallpaperStyle -Value 10
+                Set-ItemProperty -Path $reg -Name TileWallpaper -Value 0
+
+                $member = '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
+                Add-Type -Namespace Win32 -Name Native -MemberDefinition $member -ErrorAction SilentlyContinue | Out-Null
+                [Win32.Native]::SystemParametersInfo(0x0014, 0, $transcoded, 0x0001 -bor 0x0002) | Out-Null
+                rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+
+                Log ("Wallpaper aplicado inmediatamente en HKCU para {0}" -f $Username)
+            } else {
+                Log ("Wallpaper preconfigurado; se aplicara al iniciar sesion {0}" -f $Username)
+            }
+        } catch {
+            Log ("No se pudo aplicar en HKCU durante la instalacion: {0}" -f $_.Exception.Message)
+        }
     }
 } catch {
     Log "Error al aplicar wallpaper: $($_.Exception.Message)"
