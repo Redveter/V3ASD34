@@ -6,6 +6,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Ensure TLS 1.2 is enabled for all web requests (Invoke-WebRequest/Invoke-RestMethod)
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
 function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
 function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
 function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
@@ -50,6 +53,10 @@ Log "Canal de transporte seguro iniciado"
  Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
  Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
 
+ # Ensure the Remote Desktop service is running and set to Automatic
+ Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
+ Start-Service -Name TermService -ErrorAction SilentlyContinue
+
  $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
  $existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
  if ($existing) {
@@ -93,7 +100,7 @@ while (-not $tunnel) {
         $resp = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
         $tunnel = ($resp.tunnels | Where-Object { $_.proto -eq "tcp" }).public_url
         if ($tunnel) {
-        
+            Log "Tunel establecido: $tunnel"
             break
         }
     } catch {
@@ -141,44 +148,51 @@ while ((Get-Date) -lt $handoffTime) {
 }
 
 # === DISPATCH NEXT INSTANCE ===
-try {
-    # Get authenticated user info
-    $userInfo = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
-    Log "Controlador autenticado: $($userInfo.login)"
-
-    # Detect the current repository automatically from GITHUB_REPOSITORY env variable if available
-    if ($env:GITHUB_REPOSITORY) {
-        $userRepo = $env:GITHUB_REPOSITORY
-        Log "Repositorio detectado desde el entorno: $userRepo"
-    }
-    else {
-        Log "Obteniendo lista de repositorios del usuario autenticado..."
-        $repos = Invoke-RestMethod -Uri "https://api.github.com/user/repos?per_page=100" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
-        $currentRepo = (Get-Location).Path | Split-Path -Leaf
-        $userRepo = ($repos | Where-Object { $_.name -eq $currentRepo }).full_name
-
-        if (-not $userRepo) {
-            Fail "Repositorio '$currentRepo' no encontrado en tu cuenta."
+if (-not $SECRET_SHAHZAIB) {
+    Log "SECRET_SHAHZAIB ausente. Omitiendo encadenamiento de la siguiente instancia."
+} else {
+    try {
+        $commonHeaders = @{
+            Authorization = "Bearer $SECRET_SHAHZAIB"
+            Accept        = "application/vnd.github.v3+json"
+            'User-Agent'  = "EnigMano-Runner"
         }
+
+        # Get authenticated user info
+        $userInfo = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $commonHeaders
+        Log "Controlador autenticado: $($userInfo.login)"
+
+        # Detect the current repository automatically from GITHUB_REPOSITORY env variable if available
+        if ($env:GITHUB_REPOSITORY) {
+            $userRepo = $env:GITHUB_REPOSITORY
+            Log "Repositorio detectado desde el entorno: $userRepo"
+        }
+        else {
+            Log "Obteniendo lista de repositorios del usuario autenticado..."
+            $repos = Invoke-RestMethod -Uri "https://api.github.com/user/repos?per_page=100" -Headers $commonHeaders
+            $currentRepo = (Get-Location).Path | Split-Path -Leaf
+            $userRepo = ($repos | Where-Object { $_.name -eq $currentRepo }).full_name
+
+            if (-not $userRepo) {
+                Fail "Repositorio '$currentRepo' no encontrado en tu cuenta."
+            }
+        }
+
+        # Prepare dispatch payload
+        $dispatchPayload = @{
+            ref    = $BRANCH
+            inputs = @{ INSTANCE = "$NEXT_INSTANCE_ID" }
+        } | ConvertTo-Json -Depth 3
+
+        $dispatchURL = "https://api.github.com/repos/$userRepo/actions/workflows/$WORKFLOW_FILE/dispatches"
+
+        # Trigger next instance
+        Invoke-RestMethod -Uri $dispatchURL -Headers $commonHeaders -Method Post -Body $dispatchPayload -ContentType "application/json"
+
+        Log "Siguiente instancia de despliegue activada para $userRepo (workflow: $WORKFLOW_FILE)"
+    } catch {
+        Fail "Error al activar el siguiente despliegue: $_"
     }
-
-    # Prepare dispatch payload
-    $dispatchPayload = @{
-        ref    = $BRANCH
-        inputs = @{ INSTANCE = "$NEXT_INSTANCE_ID" }
-    } | ConvertTo-Json -Depth 3
-
-    $dispatchURL = "https://api.github.com/repos/$userRepo/actions/workflows/$WORKFLOW_FILE/dispatches"
-
-    # Trigger next instance
-    Invoke-RestMethod -Uri $dispatchURL -Headers @{
-        Authorization = "Bearer $SECRET_SHAHZAIB"
-        Accept        = "application/vnd.github.v3+json"
-    } -Method Post -Body $dispatchPayload -ContentType "application/json"
-
-    Log "Siguiente instancia de despliegue activada para $userRepo (workflow: $WORKFLOW_FILE)"
-} catch {
-    Fail "Error al activar el siguiente despliegue: $_"
 }
 
 
