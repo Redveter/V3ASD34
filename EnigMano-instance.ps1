@@ -1,14 +1,37 @@
 param(
-     [Parameter(Mandatory=$true)][string]$Username,
-     [Parameter(Mandatory=$true)][string]$Password,
-     [string]$InstanceLabel = "ENIG"
- )
+    [string]$Username,
+    [string]$Password,
+    [string]$InstanceLabel
+)
 
- $ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
- function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
- function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
- function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
+function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
+function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
+
+# === INPUT NORMALIZATION ===
+function New-SecurePassword {
+    $upper   = [char[]](65..90)
+    $lower   = [char[]](97..122)
+    $number  = [char[]](48..57)
+    $specialAll = ([char[]](33..47) + [char[]](58..64) + [char[]](91..96) + [char[]](123..126))
+    $excluded = @('"', "'", '`', '&', '|', '<', '>', '$', ' ') # evita problemas al pasar como argumento/salida
+    $special = $specialAll | Where-Object { $excluded -notcontains $_ }
+    $raw = @()
+    $raw += $upper   | Get-Random -Count 4
+    $raw += $lower   | Get-Random -Count 4
+    $raw += $number  | Get-Random -Count 4
+    $raw += $special | Get-Random -Count 4
+    -join ($raw | Sort-Object { Get-Random })
+}
+
+$suffix = -join ((48..57 + 97..122) | Get-Random -Count 4 | ForEach-Object {[char]$_})
+if ([string]::IsNullOrWhiteSpace($InstanceLabel)) { $InstanceLabel = "ENIG-$env:INSTANCE_ID-$suffix" }
+if ([string]::IsNullOrWhiteSpace($Username))      { $Username      = "rdp-$suffix" }
+if ([string]::IsNullOrWhiteSpace($Password))      { $Password      = New-SecurePassword }
+
+Write-Host "::add-mask::$Password"
 
 # === ASCII BANNER ===
 $now = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
