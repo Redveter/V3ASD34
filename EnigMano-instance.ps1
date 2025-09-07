@@ -19,16 +19,16 @@ Write-Host "::add-mask::$Password"
 
 # === ASCII BANNER ===
 $now = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
- Write-Host @"
- ----------------------------------------------------
+Write-Host @"
+----------------------------------------------------
        ENIGMANO INSTANCIA $env:INSTANCE_ID — $InstanceLabel
- ----------------------------------------------------
+----------------------------------------------------
    ESTADO     : Inicializando secuencia de despliegue
    USUARIO    : $Username
    HORA       : $now
    ARQUITECTO : SHAHZAIB-YT
- ----------------------------------------------------
- "@
+----------------------------------------------------
+"@
 
 # === ENVIRONMENT VARIABLES ===
 $SECRET_SHAHZAIB = $env:SECRET_SHAHZAIB
