@@ -10,27 +10,23 @@ function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
 function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
 function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
 
-# Ensure Unicode box characters render correctly
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::InputEncoding = [System.Text.Encoding]::UTF8
-
 # === INPUT NORMALIZATION ===
 if ([string]::IsNullOrWhiteSpace($InstanceLabel)) { $InstanceLabel = "Nex" }
 if ([string]::IsNullOrWhiteSpace($Username))      { $Username      = "Nex" }
-if ([string]::IsNullOrWhiteSpace($Password))      { $Password      = "P@ssw0rd!" }
+if ([string]::IsNullOrWhiteSpace($Password))      { $Password      = "Example#9943" }
 
 
 # === ASCII BANNER ===
 $now = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Host @"
-╔═════════════════════                      ═════════════════╗
-║ ENIGMANO INSTANCIA $env:INSTANCE_ID - $InstanceLabel       ║
-╚═════════════════════                      ═════════════════╝
+----------------------------------------------------
+       ENIGMANO INSTANCIA $env:INSTANCE_ID - $InstanceLabel
+----------------------------------------------------
    ESTADO     : Inicializando secuencia de despliegue
    USUARIO    : $Username
    HORA       : $now
    ARQUITECTO : SHAHZAIB-YT
-╚═════════════════════                      ═════════════════╝
+----------------------------------------------------
 "@
 
 # === ENVIRONMENT VARIABLES ===
@@ -43,15 +39,11 @@ $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
 
 # === TUNNEL SETUP ===
-try {
-    Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
-    Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip -UseBasicParsing
-    Expand-Archive ngrok.zip -DestinationPath . -Force
-    if ($NGROK_SHAHZAIB) { .\ngrok.exe authtoken $NGROK_SHAHZAIB }
-    Log "Canal de transporte seguro iniciado"
-} catch {
-    Log "Aviso: No se pudo preparar ngrok: $($_.Exception.Message)"
-}
+Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
+Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+Expand-Archive ngrok.zip -DestinationPath .
+.\ngrok.exe authtoken $NGROK_SHAHZAIB
+Log "Canal de transporte seguro iniciado"
 
 # === ACCESS ENABLEMENT ===
  Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
@@ -71,24 +63,6 @@ try {
  Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
  Log "Protocolos de acceso habilitados para la instancia"
 
-# === USER CLEANUP (preserva cuentas del sistema y runneradmin durante la ejecucion) ===
-try {
-    $preserve = @('Administrator','DefaultAccount','WDAGUtilityAccount','Guest', $Username)
-    if (Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue) { $preserve += 'runneradmin' }
-    $others = Get-LocalUser | Where-Object { $preserve -notcontains $_.Name }
-    foreach ($u in $others) {
-        try {
-            Disable-LocalUser -Name $u.Name -ErrorAction SilentlyContinue
-            if ($u.Name -notin @('DefaultAccount','WDAGUtilityAccount','Guest','Administrator','runneradmin')) {
-                Remove-LocalUser -Name $u.Name -ErrorAction SilentlyContinue
-            }
-        } catch {}
-    }
-    Log "Usuarios no autorizados deshabilitados/eliminados (se preserva runneradmin para estabilidad del runner)"
-} catch {
-    Log "Aviso: No se pudo limpiar usuarios: $($_.Exception.Message)"
-}
-
  try {
      if ($InstanceLabel) {
          $currentName = (Get-ComputerInfo).CsName
@@ -106,7 +80,6 @@ $tunnel = $null
 $regionList = @("us", "eu", "ap", "au", "sa", "jp", "in")
 $regionIndex = 0
 
-if (Test-Path .\ngrok.exe) {
 while (-not $tunnel) {
     $region = $regionList[$regionIndex]
     $regionIndex = ($regionIndex + 1) % $regionList.Count
@@ -129,9 +102,6 @@ while (-not $tunnel) {
 
     Start-Sleep -Seconds 5
 }
-} else {
-    Log "ngrok no disponible; se omite la creacion del tunel."
-}
 
 # === DATA VAULT CREATION ===
 try {
@@ -144,78 +114,11 @@ try {
         Log "La boveda de datos ya existe en $dataFolderPath"
     }
 } catch {
-    Log "Aviso: Error al crear la boveda de datos: $($_.Exception.Message)"
+    Fail "Error al crear la boveda de datos: $_"
 }
 
-$tunnelClean = if ($tunnel) { $tunnel -replace "^tcp://", "" } else { "desconocido:3389" }
-
-# === RDP ACCESS BANNER (colored, padded) ===
-$w = 38  # ancho interior del recuadro
-function Out-BoxLine([string]$text, [string]$color='White') {
-    if ($null -eq $text) { $text = '' }
-    if ($text.Length -gt $w) { $text = $text.Substring(0, $w) }
-    $pad = ' ' * ($w - $text.Length)
-    Write-Host ("║ {0}{1} ║" -f $text, $pad) -ForegroundColor $color
-}
-
-Write-Host ("╔{0}╗" -f ('═' * ($w + 2))) -ForegroundColor Cyan
-Out-BoxLine 'Acceso Nex RDP' 'Cyan'
-Write-Host ("╠{0}╣" -f ('═' * ($w + 2))) -ForegroundColor Cyan
-Out-BoxLine ("Host: {0}" -f $tunnelClean) 'White'
-Out-BoxLine ("Usuario: {0}" -f $Username) 'White'
-Out-BoxLine ("Contraseña: {0}" -f $Password) 'White'
-Write-Host ("╚{0}╝" -f ('═' * ($w + 2))) -ForegroundColor Cyan
-
-# GitHub notice (opcional, util para copiado)
+$tunnelClean = $tunnel -replace "^tcp://", ""
 Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContrasena: $Password"
-
-# === DISPATCH NEXT INSTANCE (opcional) ===
-if ([string]::IsNullOrWhiteSpace($SECRET_SHAHZAIB)) {
-    Log "SECRET_SHAHZAIB no configurado; se omite el dispatch de la siguiente instancia."
-} else {
-try {
-    # Get authenticated user info
-    $userInfo = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
-    Log "Controlador autenticado: $($userInfo.login)"
-
-    # Detect the current repository automatically from GITHUB_REPOSITORY env variable if available
-    if ($env:GITHUB_REPOSITORY) {
-        $userRepo = $env:GITHUB_REPOSITORY
-        Log "Repositorio detectado desde el entorno: $userRepo"
-    }
-    else {
-        Log "Obteniendo lista de repositorios del usuario autenticado..."
-        $repos = Invoke-RestMethod -Uri "https://api.github.com/user/repos?per_page=100" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
-        $currentRepo = (Get-Location).Path | Split-Path -Leaf
-        $userRepo = ($repos | Where-Object { $_.name -eq $currentRepo }).full_name
-
-        if (-not $userRepo) {
-            Log "Repositorio '$currentRepo' no encontrado en tu cuenta. Se omite el dispatch."
-            $userRepo = $null
-        }
-    }
-
-    if ($userRepo) {
-        # Prepare dispatch payload
-        $dispatchPayload = @{
-            ref    = $BRANCH
-            inputs = @{ INSTANCE = "$NEXT_INSTANCE_ID" }
-        } | ConvertTo-Json -Depth 3
-
-        $dispatchURL = "https://api.github.com/repos/$userRepo/actions/workflows/$WORKFLOW_FILE/dispatches"
-
-        # Trigger next instance
-        Invoke-RestMethod -Uri $dispatchURL -Headers @{
-            Authorization = "Bearer $SECRET_SHAHZAIB"
-            Accept        = "application/vnd.github.v3+json"
-        } -Method Post -Body $dispatchPayload -ContentType "application/json"
-
-        Log "Siguiente instancia de despliegue activada para $userRepo (workflow: $WORKFLOW_FILE)"
-    }
-} catch {
-    Log "Aviso: No se pudo activar el siguiente despliegue: $($_.Exception.Message)"
-}
-}
 
 # === TIMERS ===
 $totalMinutes    = 340
@@ -237,7 +140,46 @@ while ((Get-Date) -lt $handoffTime) {
     Start-Sleep -Seconds ($waitMinutes * 60)
 }
 
-# (el bloque de dispatch duplicado fue eliminado para evitar fallos)
+# === DISPATCH NEXT INSTANCE ===
+try {
+    # Get authenticated user info
+    $userInfo = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
+    Log "Controlador autenticado: $($userInfo.login)"
+
+    # Detect the current repository automatically from GITHUB_REPOSITORY env variable if available
+    if ($env:GITHUB_REPOSITORY) {
+        $userRepo = $env:GITHUB_REPOSITORY
+        Log "Repositorio detectado desde el entorno: $userRepo"
+    }
+    else {
+        Log "Obteniendo lista de repositorios del usuario autenticado..."
+        $repos = Invoke-RestMethod -Uri "https://api.github.com/user/repos?per_page=100" -Headers @{ Authorization = "Bearer $SECRET_SHAHZAIB" }
+        $currentRepo = (Get-Location).Path | Split-Path -Leaf
+        $userRepo = ($repos | Where-Object { $_.name -eq $currentRepo }).full_name
+
+        if (-not $userRepo) {
+            Fail "Repositorio '$currentRepo' no encontrado en tu cuenta."
+        }
+    }
+
+    # Prepare dispatch payload
+    $dispatchPayload = @{
+        ref    = $BRANCH
+        inputs = @{ INSTANCE = "$NEXT_INSTANCE_ID" }
+    } | ConvertTo-Json -Depth 3
+
+    $dispatchURL = "https://api.github.com/repos/$userRepo/actions/workflows/$WORKFLOW_FILE/dispatches"
+
+    # Trigger next instance
+    Invoke-RestMethod -Uri $dispatchURL -Headers @{
+        Authorization = "Bearer $SECRET_SHAHZAIB"
+        Accept        = "application/vnd.github.v3+json"
+    } -Method Post -Body $dispatchPayload -ContentType "application/json"
+
+    Log "Siguiente instancia de despliegue activada para $userRepo (workflow: $WORKFLOW_FILE)"
+} catch {
+    Fail "Error al activar el siguiente despliegue: $_"
+}
 
 
 # === SHUTDOWN MONITOR (randomized log intervals) ===
@@ -258,5 +200,5 @@ if ($RUNNER_ENV -eq "self-hosted") {
     Stop-Computer -Force
 } else {
     Log "Apagado omitido en entorno hospedado. Proceso finalizado."
-    Exit 0
+    Exit
 }
