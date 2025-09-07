@@ -22,9 +22,9 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - shell: powershell
+      - name: 🏢 Parametros del despliegue
+        shell: powershell
         run: |
-        name: Parametros del despliegue
           Write-Host 'Parametros del despliegue'
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
