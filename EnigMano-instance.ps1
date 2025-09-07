@@ -98,7 +98,8 @@ try {
     $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
 
     try {
-        Invoke-WebRequest -Uri $WALLPAPER_URL -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
+        $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
+        Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
         Log "Wallpaper descargado en $wpPath"
     } catch {
         Log "No se pudo descargar el wallpaper: $($_.Exception.Message)"
@@ -107,14 +108,26 @@ try {
     if (Test-Path $wpPath) {
         $startupDir = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
         New-Item -Path $startupDir -ItemType Directory -Force | Out-Null
+
+        # Crear script PowerShell que aplica el wallpaper en HKCU y refresca
+        $psApplyPath = Join-Path $wpRoot "ApplyEnigManoWallpaper.ps1"
+        $psContent = @"
+Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value '$wpPath'
+Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 10
+Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
+rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+"@
+        Set-Content -Path $psApplyPath -Value $psContent -Encoding UTF8
+
+        # Crear lanzador .cmd en Inicio de Todos los usuarios
         $cmdPath = Join-Path $startupDir "ApplyEnigManoWallpaper.cmd"
-
-        $cmd = "@echo off`r`n" +
-               "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value '$wpPath'; Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value 10; Set-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value 0; rundll32 user32.dll,UpdatePerUserSystemParameters 1,True\"`r`n" +
-               "del \"%~f0\" >nul 2>&1`r`n"
-
-        Set-Content -Path $cmdPath -Value $cmd -Encoding ASCII
-        Log "Script de inicio creado: $cmdPath (se auto-eliminara tras aplicarse)"
+        $cmdContent = @"
+@echo off
+powershell -NoProfile -ExecutionPolicy Bypass -File "$psApplyPath"
+del "%~f0" >nul 2>&1
+"@
+        Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
+        Log "Scripts de inicio creados: $psApplyPath y $cmdPath"
     }
 } catch {
     Log "Error general al configurar el wallpaper: $($_.Exception.Message)"
