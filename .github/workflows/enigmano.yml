@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy-enigmano:
-    name: "🏢 Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
+    name: "Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
 
     env:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - shell: powershell
         run: |
-          Write-Host 'Parametros del despliegue'
+          🏢 Parametros del despliegue
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
           Write-Host '==============================================='
