@@ -22,113 +22,113 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: Parámetros del despliegue
+      - name: 📋 Parámetros del despliegue
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
-          Write-Host "::group::Parámetros del despliegue"
-          Write-Host "==============================================="
-          Write-Host "Instancia EnigMano      : $env:INSTANCE_ID"
-          Write-Host "Instancia anterior      : $prevInstance"
-          Write-Host "Repositorio de GitHub   : $env:REPO"
-          Write-Host "Workflow de despliegue  : $env:WORKFLOW_FILE"
-          Write-Host "ID de despliegue        : $env:DEPLOYMENT_ID"
-          Write-Host "==============================================="
-          Write-Host "::endgroup::"
+          echo "::group::📋 Parámetros del despliegue"
+          echo "==============================================="
+          echo "🔢 Instancia EnigMano    : $env:INSTANCE_ID"
+          echo "↩️  Instancia anterior   : $prevInstance"
+          echo "📦 Repositorio           : $env:REPO"
+          echo "📋 Workflow              : $env:WORKFLOW_FILE"
+          echo "🆔 ID de despliegue      : $env:DEPLOYMENT_ID"
+          echo "==============================================="
+          echo "::endgroup::"
 
-      - name: Validar secretos
+      - name: 🔐 Validar secretos
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Validación de secretos"
+          echo "::group::🔐 Validación de secretos"
           if (-not $env:NGROK_SHAHZAIB) {
-            Write-Error "[ERROR] Falta el token de Ngrok: NGROK_SHAHZAIB"
+            Write-Error "❌ Falta el token de Ngrok: NGROK_SHAHZAIB"
             exit 1
           }
           if (-not $env:SECRET_SHAHZAIB) {
-            Write-Host "[WARN] SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
+            echo "⚠️  SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
           }
-          Write-Host "[OK] Validación de secretos completada"
-          Write-Host "::endgroup::"
+          echo "✅ Secretos verificados"
+          echo "::endgroup::"
 
-      - name: Instalar software con Chocolatey (Brave, WinRAR, Notepad++)
+      - name: 📦 Instalar software (Brave, WinRAR, Notepad++)
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Instalación de software"
-          Write-Host "[INFO] Preparando Chocolatey..."
+          echo "::group::📦 Instalación de software"
+          echo "📥 Preparando Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          choco --version | Out-Host
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
+          choco --version *> $null
+          echo "📦 Chocolatey listo"
 
           function Install-App {
             param([string]$Id,[string]$Nombre)
-            choco install $Id -y --no-progress
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "[OK] $Nombre instalado"
-            } else {
-              Write-Host "[SKIP] $Nombre ya estaba instalado u omitido (código $LASTEXITCODE)"
-            }
+            choco install $Id -y --no-progress *> $null
+            $code = $LASTEXITCODE
+            if ($code -in 0,3010) { echo "✅ $Nombre instalado" }
+            elseif ($code -eq 0)  { echo "✅ $Nombre instalado" }
+            else { echo "⚠️  $Nombre pudo no instalarse correctamente (código $code)" }
           }
 
           Install-App -Id 'brave' -Nombre 'Brave'
           Install-App -Id 'winrar' -Nombre 'WinRAR'
           Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
-          Write-Host "::endgroup::"
+          echo "::endgroup::"
 
-      - name: Forzar instalación de uBlock Origin en Brave
+      - name: 🛡️ Política uBlock Origin (Brave)
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Política para uBlock Origin (Brave)"
-          Write-Host "[INFO] Configurando directiva para forzar la instalación de uBlock Origin en Brave..."
+          echo "::group::🛡️ Política uBlock Origin (Brave)"
+          echo "📋 Aplicando directiva para forzar la instalación de uBlock Origin en Brave..."
           $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
           New-Item -Path $policyPath -Force | Out-Null
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          Write-Host "[OK] Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
-          Write-Host "::endgroup::"
+          echo "✅ Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
+          echo "::endgroup::"
 
-      - name: Descargar EnigMano-Instance.ps1
+      - name: ⬇️ Descargar EnigMano-Instance.ps1
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Descarga del script EnigMano"
+          echo "::group::⬇️ Descarga del script EnigMano"
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
-          $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
-          Write-Host "[INFO] Origen: $url"
+          $url = "https://raw.githubusercontent.com/$repo/$branch/refs/heads/main/EnigMano-instance.ps1"
+          echo "🔗 Origen: $url"
           try {
-            Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop
+            Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop *> $null
           } catch {
-            Write-Error "[ERROR] Error al descargar EnigMano-Instance.ps1: $($_.Exception.Message)"
+            Write-Error "❌ Error al descargar EnigMano-Instance.ps1: $($_.Exception.Message)"
             exit 1
           }
           if (!(Test-Path "./EnigMano-Instance.ps1")) {
-            Write-Error "[ERROR] No se encontró el archivo descargado EnigMano-Instance.ps1"
+            Write-Error "❌ No se encontró el archivo descargado EnigMano-Instance.ps1"
             exit 1
           }
-          Write-Host "[OK] EnigMano-Instance.ps1 descargado"
-          Write-Host "::endgroup::"
+          echo "✅ EnigMano-Instance.ps1 descargado"
+          echo "::endgroup::"
 
-      - name: Ejecutar script de instancia EnigMano
+      - name: 🚀 Ejecutar script de instancia EnigMano
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Ejecución del script"
-          Write-Host "[INFO] Iniciando EnigMano-Instance.ps1"
+          echo "::group::🚀 Ejecución del script"
+          echo "▶️  Iniciando EnigMano-Instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
-          Write-Host "::endgroup::"
+          echo "::endgroup::"
 
-      - name: Estado final
+      - name: 🏁 Estado final
         if: always()
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Write-Host "::group::Estado final"
-          Write-Host "[OK] Instancia EnigMano $env:INSTANCE_ID finalizada"
-          Write-Host "[INFO] Impulsado por: SHAHZAIB-YT"
-          Write-Host "[OK] Despliegue ejecutado con precisión"
-          Write-Host "::endgroup::"
+          echo "::group::🏁 Estado final"
+          echo "✅ Instancia EnigMano $env:INSTANCE_ID finalizada"
+          echo "🔋 Impulsado por: SHAHZAIB-YT"
+          echo "✅ Despliegue ejecutado con precisión"
+          echo "::endgroup::"
