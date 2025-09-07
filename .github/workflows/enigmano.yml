@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       INSTANCE:
-        description: "Numero de instancia [1-10]:"
+        description: "⌨️ Numero de instancia [1-10]:"
         required: true
         default: "1"
 
@@ -22,7 +22,7 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: 🏢 Parametros del despliegue
+      - name: ⚙️ Parametros
         shell: powershell
         run: |
           # script
@@ -77,7 +77,7 @@ jobs:
           Install-App -Id 'winrar' -Nombre 'WinRAR'
           Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
 
-      - name: 📦 Extensión - uBlock Origin (Brave)
+      - name: 🪙 Extensión - uBlock Origin (Brave)
         shell: powershell
         run: |
           Write-Host 'Politica uBlock Origin (Brave)'
@@ -96,12 +96,8 @@ jobs:
           Write-Host 'Iniciando EnigMano-instance.ps1'
           powershell.exe -ExecutionPolicy Bypass -File ".\powershell\EnigMano-instance.ps1"
 
-      - if: always()
-        name: 🏁 Final
+      - name: 🏁 Finalizado
+        if: always()
         shell: powershell
         run: |
-          Write-Host 'Estado final'
-          $ProgressPreference = 'SilentlyContinue'
-          Write-Host ("Instancia EnigMano {0} finalizada" -f $env:INSTANCE_ID)
-          Write-Host 'Impulsado por: SHAHZAIB-YT'
-          Write-Host 'Despliegue ejecutado con precision'
+          Write-Host "Developer by 🐳 Nex"
