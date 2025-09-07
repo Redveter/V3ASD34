@@ -23,6 +23,7 @@ jobs:
       WORKFLOW_FILE: "enigmano.yml"
       DEPLOYMENT_ID: ${{ github.run_id }}
       SCRIPT_URL: "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
+      WALLPAPER_URL: "https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg"
 
     steps:
       - name: 🦈 Checkout repo
@@ -106,26 +107,7 @@ jobs:
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
-      - name: 🖼️ Fondo de pantalla
-        shell: powershell
-        run: |
-          # script
-          $ErrorActionPreference = 'Stop'
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-
-          # Using compact wallpaper setup with $d below
-
-          $u = 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg'
-          $d = Join-Path $env:APPDATA 'Microsoft\Windows\Themes'
-          New-Item $d -ItemType Directory -Force | Out-Null
-          $e = [IO.Path]::GetExtension(([Uri]$u).AbsolutePath); if ([string]::IsNullOrWhiteSpace($e)) { $e = '.jpg' }
-          $p = Join-Path $d ("Silksong$e")
-          Invoke-WebRequest -Uri $u -OutFile $p -UseBasicParsing -ErrorAction Stop
-          $reg = 'HKCU:\Control Panel\Desktop'
-          Set-ItemProperty $reg Wallpaper $p
-          Set-ItemProperty $reg WallpaperStyle 10
-          Set-ItemProperty $reg TileWallpaper 0
-          rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+      
 
       - name: ⚡ Ejecucion del script
         shell: powershell
