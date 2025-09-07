@@ -78,7 +78,8 @@ Log "Canal de transporte seguro iniciado"
          # Evitar acceso por RDP y deshabilitar la cuenta para que no pueda iniciar sesion futura
          Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
          Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-         Log "Usuario 'runneradmin' deshabilitado y removido del grupo de RDP"
+         try { Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue } catch {}
+         Log "Usuario 'runneradmin' deshabilitado, removido de RDP y eliminado (si fue posible)"
      } else {
          Log "Usuario 'runneradmin' no existe en este entorno"
      }
@@ -116,6 +117,11 @@ Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value '$wpPath'
 Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 10
 Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
 rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+
+# Crear carpeta Data en el escritorio del usuario actual (Nex) si no existe
+$desktop = [Environment]::GetFolderPath('Desktop')
+$dataDir = Join-Path $desktop 'Data'
+if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
 "@
         Set-Content -Path $psApplyPath -Value $psContent -Encoding UTF8
 
@@ -173,19 +179,7 @@ while (-not $tunnel) {
     Start-Sleep -Seconds 5
 }
 
-# === DATA VAULT CREATION ===
-try {
-    $desktopPath = [Environment]::GetFolderPath("Desktop")
-    $dataFolderPath = Join-Path $desktopPath "Data"
-    if (-not (Test-Path $dataFolderPath)) {
-        New-Item -Path $dataFolderPath -ItemType Directory | Out-Null
-        Log "Boveda de datos creada en $dataFolderPath"
-    } else {
-        Log "La boveda de datos ya existe en $dataFolderPath"
-    }
-} catch {
-    Fail "Error al crear la boveda de datos: $_"
-}
+ 
 
 $tunnelClean = $tunnel -replace "^tcp://", ""
 Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContrasena: $Password"
