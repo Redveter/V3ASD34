@@ -1,10 +1,10 @@
-name: "⚡ Despliegue de EnigMano Windows 11"
+name: "Despliegue de EnigMano Windows 11"
 
 on:
   workflow_dispatch:
     inputs:
       INSTANCE:
-        description: "Número de instancia a desplegar (p. ej., 1, 2, 3...)"
+        description: "Numero de instancia a desplegar (p. ej., 1, 2, 3...)"
         required: true
         default: "1"
 
