@@ -22,9 +22,9 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::📋 Parámetros del despliegue"
+          echo "📋 Parámetros del despliegue"
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
           echo "==============================================="
@@ -34,11 +34,10 @@ jobs:
           echo "📋 Workflow              : $env:WORKFLOW_FILE"
           echo "🆔 ID de despliegue      : $env:DEPLOYMENT_ID"
           echo "==============================================="
-          echo "::endgroup::"
 
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::🔐 Validación de secretos"
+          echo "🔐 Validación de secretos"
           $ProgressPreference = 'SilentlyContinue'
           if (-not $env:NGROK_SHAHZAIB) {
             Write-Error "❌ Falta el token de Ngrok: NGROK_SHAHZAIB"
@@ -48,11 +47,10 @@ jobs:
             echo "⚠️  SECRET_SHAHZAIB no está configurado. Se omitirá el encadenamiento de la siguiente instancia."
           }
           echo "✅ Secretos verificados"
-          echo "::endgroup::"
 
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::📦 Instalación de software"
+          echo "📦 Instalación de software"
           $ProgressPreference = 'SilentlyContinue'
           echo "📥 Preparando Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -73,22 +71,20 @@ jobs:
           Install-App -Id 'brave' -Nombre 'Brave'
           Install-App -Id 'winrar' -Nombre 'WinRAR'
           Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
-          echo "::endgroup::"
 
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::🛡️ Política uBlock Origin (Brave)"
+          echo "🛡️ Política uBlock Origin (Brave)"
           $ProgressPreference = 'SilentlyContinue'
           echo "📋 Aplicando directiva para forzar la instalación de uBlock Origin en Brave..."
           $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
           New-Item -Path $policyPath -Force | Out-Null
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           echo "✅ Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
-          echo "::endgroup::"
 
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::⬇️ Descarga del script EnigMano"
+          echo "⬇️ Descarga del script EnigMano"
           $ProgressPreference = 'SilentlyContinue'
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
@@ -106,22 +102,19 @@ jobs:
             exit 1
           }
           echo "✅ EnigMano-Instance.ps1 descargado"
-          echo "::endgroup::"
 
-      - shell: pwsh
+      - shell: powershell
         run: |
-          echo "::group::🚀 Ejecución del script"
+          echo "🚀 Ejecución del script"
           $ProgressPreference = 'SilentlyContinue'
           echo "▶️  Iniciando EnigMano-Instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
-          echo "::endgroup::"
 
       - if: always()
-        shell: pwsh
+        shell: powershell
         run: |
-          echo "::group::🏁 Estado final"
+          echo "🏁 Estado final"
           $ProgressPreference = 'SilentlyContinue'
           echo "✅ Instancia EnigMano $env:INSTANCE_ID finalizada"
           echo "🔋 Impulsado por: SHAHZAIB-YT"
           echo "✅ Despliegue ejecutado con precisión"
-          echo "::endgroup::"
