@@ -10,6 +10,10 @@ function Timestamp { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
 function Log($msg) { Write-Host "[ENIGMANO $(Timestamp)] $msg" }
 function Fail($msg) { Write-Error "[ENIGMANO-ERROR $(Timestamp)] $msg"; Exit 1 }
 
+# Ensure Unicode box characters render correctly
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+
 # === INPUT NORMALIZATION ===
 if ([string]::IsNullOrWhiteSpace($InstanceLabel)) { $InstanceLabel = "Nex" }
 if ([string]::IsNullOrWhiteSpace($Username))      { $Username      = "Nex" }
