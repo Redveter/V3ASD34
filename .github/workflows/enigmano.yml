@@ -23,7 +23,7 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: 📌 Parámetros del despliegue — Instancia #${{ env.INSTANCE_ID }}
+      - name: "📌 Parámetros del despliegue — Instancia #${{ env.INSTANCE_ID }}"
         shell: pwsh
         run: |
           $prevInstance = [int]$env:INSTANCE_ID - 1
@@ -72,9 +72,9 @@ jobs:
           $password = New-SecurePassword
 
           Write-Host "::add-mask::$password"
-          "RDP_USER=$username"       | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "RDP_PASS=$password"       | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "INSTANCE_LABEL=$instanceLabel" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "RDP_USER=$username"
+          Add-Content -Path $env:GITHUB_ENV -Value "RDP_PASS=$password"
+          Add-Content -Path $env:GITHUB_ENV -Value "INSTANCE_LABEL=$instanceLabel"
 
           Write-Host "════════════════════════════════════════════════"
           Write-Host "🆔 Identidad generada"
@@ -111,7 +111,8 @@ jobs:
         shell: pwsh
         run: |
           $repo = "$env:REPO"
-          $branch = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "main" }
+          $branch = $env:GITHUB_REF_NAME
+          if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
           $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
           Write-Host "🌐 Descargando EnigMano-instance.ps1 desde:"
           Write-Host "   $url"
