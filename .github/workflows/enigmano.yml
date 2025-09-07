@@ -18,7 +18,7 @@ jobs:
       SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
       NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
       REPO: ${{ github.repository }}
-      WORKFLOW_FILE: "enigmano-Win-11.yml"
+      WORKFLOW_FILE: "enigmano.yml"
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
