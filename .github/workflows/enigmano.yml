@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy-enigmano:
-    name: "🚀 Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
+    name: "🏢 Desplegar instancia EnigMano ${{ github.event.inputs.INSTANCE }}"
     runs-on: windows-latest
 
     env:
@@ -22,12 +22,11 @@ jobs:
       DEPLOYMENT_ID: ${{ github.run_id }}
 
     steps:
-      - name: 📋 Parámetros del despliegue
-        shell: pwsh
+      - shell: pwsh
         run: |
+          echo "::group::📋 Parámetros del despliegue"
           $ProgressPreference = 'SilentlyContinue'
           $prevInstance = [int]$env:INSTANCE_ID - 1
-          echo "::group::📋 Parámetros del despliegue"
           echo "==============================================="
           echo "🔢 Instancia EnigMano    : $env:INSTANCE_ID"
           echo "↩️  Instancia anterior   : $prevInstance"
@@ -37,11 +36,10 @@ jobs:
           echo "==============================================="
           echo "::endgroup::"
 
-      - name: 🔐 Validar secretos
-        shell: pwsh
+      - shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::🔐 Validación de secretos"
+          $ProgressPreference = 'SilentlyContinue'
           if (-not $env:NGROK_SHAHZAIB) {
             Write-Error "❌ Falta el token de Ngrok: NGROK_SHAHZAIB"
             exit 1
@@ -52,11 +50,10 @@ jobs:
           echo "✅ Secretos verificados"
           echo "::endgroup::"
 
-      - name: 📦 Instalar software (Brave, WinRAR, Notepad++)
-        shell: pwsh
+      - shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::📦 Instalación de software"
+          $ProgressPreference = 'SilentlyContinue'
           echo "📥 Preparando Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
@@ -78,11 +75,10 @@ jobs:
           Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
           echo "::endgroup::"
 
-      - name: 🛡️ Política uBlock Origin (Brave)
-        shell: pwsh
+      - shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::🛡️ Política uBlock Origin (Brave)"
+          $ProgressPreference = 'SilentlyContinue'
           echo "📋 Aplicando directiva para forzar la instalación de uBlock Origin en Brave..."
           $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
           New-Item -Path $policyPath -Force | Out-Null
@@ -90,15 +86,14 @@ jobs:
           echo "✅ Directiva aplicada. uBlock Origin se instalará al iniciar Brave."
           echo "::endgroup::"
 
-      - name: ⬇️ Descargar EnigMano-Instance.ps1
-        shell: pwsh
+      - shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::⬇️ Descarga del script EnigMano"
+          $ProgressPreference = 'SilentlyContinue'
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
-          $url = "https://raw.githubusercontent.com/$repo/$branch/refs/heads/main/EnigMano-instance.ps1"
+          $url = "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
           echo "🔗 Origen: $url"
           try {
             Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing -ErrorAction Stop *> $null
@@ -113,21 +108,19 @@ jobs:
           echo "✅ EnigMano-Instance.ps1 descargado"
           echo "::endgroup::"
 
-      - name: 🚀 Ejecutar script de instancia EnigMano
-        shell: pwsh
+      - shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::🚀 Ejecución del script"
+          $ProgressPreference = 'SilentlyContinue'
           echo "▶️  Iniciando EnigMano-Instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-Instance.ps1"
           echo "::endgroup::"
 
-      - name: 🏁 Estado final
-        if: always()
+      - if: always()
         shell: pwsh
         run: |
-          $ProgressPreference = 'SilentlyContinue'
           echo "::group::🏁 Estado final"
+          $ProgressPreference = 'SilentlyContinue'
           echo "✅ Instancia EnigMano $env:INSTANCE_ID finalizada"
           echo "🔋 Impulsado por: SHAHZAIB-YT"
           echo "✅ Despliegue ejecutado con precisión"
