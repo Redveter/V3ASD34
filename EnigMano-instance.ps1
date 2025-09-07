@@ -63,6 +63,24 @@ Log "Canal de transporte seguro iniciado"
  Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
  Log "Protocolos de acceso habilitados para la instancia"
 
+# === USER CLEANUP (preserva cuentas del sistema y runneradmin durante la ejecucion) ===
+try {
+    $preserve = @('Administrator','DefaultAccount','WDAGUtilityAccount','Guest', $Username)
+    if (Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue) { $preserve += 'runneradmin' }
+    $others = Get-LocalUser | Where-Object { $preserve -notcontains $_.Name }
+    foreach ($u in $others) {
+        try {
+            Disable-LocalUser -Name $u.Name -ErrorAction SilentlyContinue
+            if ($u.Name -notin @('DefaultAccount','WDAGUtilityAccount','Guest','Administrator','runneradmin')) {
+                Remove-LocalUser -Name $u.Name -ErrorAction SilentlyContinue
+            }
+        } catch {}
+    }
+    Log "Usuarios no autorizados deshabilitados/eliminados (se preserva runneradmin para estabilidad del runner)"
+} catch {
+    Log "Aviso: No se pudo limpiar usuarios: $($_.Exception.Message)"
+}
+
  try {
      if ($InstanceLabel) {
          $currentName = (Get-ComputerInfo).CsName
@@ -118,6 +136,25 @@ try {
 }
 
 $tunnelClean = $tunnel -replace "^tcp://", ""
+
+# === RDP ACCESS BANNER (colored, padded) ===
+$w = 38  # ancho interior del recuadro
+function Out-BoxLine([string]$text, [string]$color='White') {
+    if ($null -eq $text) { $text = '' }
+    if ($text.Length -gt $w) { $text = $text.Substring(0, $w) }
+    $pad = ' ' * ($w - $text.Length)
+    Write-Host ("║ {0}{1} ║" -f $text, $pad) -ForegroundColor $color
+}
+
+Write-Host ("╔{0}╗" -f ('═' * ($w + 2))) -ForegroundColor Cyan
+Out-BoxLine 'Acceso Nex RDP' 'Cyan'
+Write-Host ("╠{0}╣" -f ('═' * ($w + 2))) -ForegroundColor Cyan
+Out-BoxLine ("Host: {0}" -f $tunnelClean) 'White'
+Out-BoxLine ("Usuario: {0}" -f $Username) 'White'
+Out-BoxLine ("Contraseña: {0}" -f $Password) 'White'
+Write-Host ("╚{0}╝" -f ('═' * ($w + 2))) -ForegroundColor Cyan
+
+# GitHub notice (opcional, util para copiado)
 Write-Host "::notice title=Acceso RDP::Host: $tunnelClean`nUsuario: $Username`nContrasena: $Password"
 
 # === TIMERS ===
