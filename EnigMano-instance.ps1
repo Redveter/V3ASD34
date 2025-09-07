@@ -127,6 +127,16 @@ try {
             & reg.exe unload "$defaultHive" | Out-Null
         }
 
+        # Copiar tambien a TranscodedWallpaper del perfil Default para que se herede el archivo
+        try {
+            $defThemes = Join-Path $env:SystemDrive 'Users\Default\AppData\Roaming\Microsoft\Windows\Themes'
+            New-Item -Path $defThemes -ItemType Directory -Force | Out-Null
+            Copy-Item -Path $wpPath -Destination (Join-Path $defThemes 'TranscodedWallpaper') -Force
+            Log "TranscodedWallpaper precreado en perfil Default"
+        } catch {
+            Log ("No se pudo preparar TranscodedWallpaper en Default: {0}" -f $_.Exception.Message)
+        }
+
         # Si el perfil de $Username ya existe, intente preconfigurarlo directamente usando su SID real
         $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
         if (Test-Path $userNt) {
@@ -143,22 +153,23 @@ try {
             } finally {
                 try { & reg.exe unload "$targetHive" | Out-Null } catch {}
             }
+
+            # Adicional: copiar TranscodedWallpaper al perfil del usuario si ya existe
+            try {
+                $userThemes = Join-Path $env:SystemDrive ("Users\{0}\AppData\Roaming\Microsoft\Windows\Themes" -f $Username)
+                New-Item -Path $userThemes -ItemType Directory -Force | Out-Null
+                Copy-Item -Path $wpPath -Destination (Join-Path $userThemes 'TranscodedWallpaper') -Force
+                Log "TranscodedWallpaper copiado al perfil existente de $Username"
+            } catch {
+                Log ("No se pudo copiar TranscodedWallpaper al perfil de {0}: {1}" -f $Username, $_.Exception.Message)
+            }
         }
 
         # Crear carpeta Data en el Desktop del perfil por defecto (se heredara a Nex en primer logon)
         $defaultDesktop = Join-Path $env:SystemDrive 'Users\Default\Desktop'
         try { New-Item -Path (Join-Path $defaultDesktop 'Data') -ItemType Directory -Force | Out-Null } catch {}
 
-        # Enforzar por politica para todos los usuarios (adicional a Default)
-        try {
-            $sysPolicy = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System'
-            New-Item -Path $sysPolicy -Force | Out-Null
-            Set-ItemProperty -Path $sysPolicy -Name 'Wallpaper' -Value $wpPath -Type String -Force
-            New-ItemProperty -Path $sysPolicy -Name 'WallpaperStyle' -Value '10' -PropertyType String -Force | Out-Null
-            Log "Politica de Wallpaper establecida en HKLM (todos los usuarios)"
-        } catch {
-            Log "No se pudo establecer politica HKLM de wallpaper: $($_.Exception.Message)"
-        }
+        # Nota: Se omite establecer politica HKLM para evitar errores de privilegios en runners hospedados
 
         # Si el script corre ya en la sesion de destino ($Username), aplicar de inmediato en HKCU
         try {
