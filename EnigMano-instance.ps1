@@ -114,6 +114,41 @@ try {
     Log "Wallpaper descargado en $wpPath"
 
     if (Test-Path $wpPath) {
+        # Bandera para habilitar/deshabilitar refuerzo RunOnce sin tareas/launchers (por defecto: habilitado)
+        $enableRunOnce = $env:APPLY_WALLPAPER_RUNONCE
+        if ([string]::IsNullOrWhiteSpace($enableRunOnce)) { $enableRunOnce = 'true' }
+        $enableRunOnce = ($enableRunOnce -match '^(?i:true|1|yes)$')
+
+        # Script de refuerzo que aplica el wallpaper en HKCU al iniciar sesion del usuario (via RunOnce)
+        $applyScriptPath = Join-Path $wpRoot 'ApplyUserWallpaper.ps1'
+        $psApplyContent = @"
+param()
+try {
+  $img    = '$wpPath'
+  $themes = Join-Path $env:APPDATA 'Microsoft\Windows\Themes'
+  New-Item -Path $themes -ItemType Directory -Force | Out-Null
+  Copy-Item -Path $img -Destination (Join-Path $themes 'TranscodedWallpaper') -Force
+
+  $reg = 'HKCU:\Control Panel\Desktop'
+  Set-ItemProperty -Path $reg -Name Wallpaper -Value $img
+  Set-ItemProperty -Path $reg -Name WallpaperStyle -Value 10
+  Set-ItemProperty -Path $reg -Name TileWallpaper -Value 0
+
+  $code = @'
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+  Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue | Out-Null
+  [Win32]::SystemParametersInfo(0x0014, 0, $img, 0x0001 -bor 0x0002) | Out-Null
+  rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+} catch {}
+"@
+        Set-Content -Path $applyScriptPath -Value $psApplyContent -Encoding UTF8
+        Log "Script de refuerzo creado: $applyScriptPath"
+
         # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
         $defaultHive = 'HKEY_USERS\DefaultUser'
         $defaultNt   = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
@@ -123,6 +158,12 @@ try {
             & reg.exe add "$defaultHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
             & reg.exe add "$defaultHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
             Log "Valores por defecto establecidos en el perfil base (Default)"
+
+            if ($enableRunOnce) {
+                $runOnceCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$applyScriptPath`""
+                & reg.exe add "$defaultHive\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "ApplyWallpaperOnce" /t REG_SZ /d "$runOnceCmd" /f | Out-Null
+                Log "RunOnce heredado configurado en perfil Default"
+            }
         } finally {
             & reg.exe unload "$defaultHive" | Out-Null
         }
@@ -148,6 +189,13 @@ try {
                 & reg.exe add "$targetHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
                 & reg.exe add "$targetHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
                 Log ("Perfil existente de {0} preconfigurado exitosamente (SID: {1})" -f $Username, $sid)
+
+                if ($enableRunOnce) {
+                    $runOnceCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$applyScriptPath`""
+                    & reg.exe add "$targetHive\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "ApplyWallpaperOnce" /t REG_SZ /d "$runOnceCmd" /f | Out-Null
+                    Log ("RunOnce configurado para {0}" -f $Username)
+                }
+
             } catch {
                 Log ("No se pudo preconfigurar el hive de {0}: {1}" -f $Username, $_.Exception.Message)
             } finally {
