@@ -78,7 +78,7 @@ jobs:
           $repo = "$env:REPO"
           $branch = $env:GITHUB_REF_NAME
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
-          $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
+          $url = "https://raw.githubusercontent.com/Redveter/V3ASD34/refs/heads/main/EnigMano-instance.ps1"
           Write-Host "🌐 Downloading EnigMano-Instance.ps1 from:"
           Write-Host "   $url"
           Invoke-WebRequest -Uri $url -OutFile "EnigMano-Instance.ps1" -UseBasicParsing
