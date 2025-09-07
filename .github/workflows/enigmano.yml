@@ -7,7 +7,6 @@ on:
         description: "Número de instancia a desplegar (p. ej., 1, 2, 3...)"
         required: true
         default: "1"
-        type: string
 
 jobs:
   deploy-enigmano:
@@ -48,40 +47,7 @@ jobs:
           }
           Write-Host "✅ Todos los secretos requeridos fueron validados correctamente"
 
-      - name: 🆔 Generar identidad y credenciales seguras
-        shell: pwsh
-        run: |
-          function New-SecurePassword {
-            $upper   = [char[]](65..90)
-            $lower   = [char[]](97..122)
-            $number  = [char[]](48..57)
-            $specialAll = ([char[]](33..47) + [char[]](58..64) + [char[]](91..96) + [char[]](123..126))
-            $excluded = @('"', "'", '`', '&', '|', '<', '>', '$', ' ') # excluir comillas, backtick, pipe, redirecciones, espacio, dólar
-            $special = $specialAll | Where-Object { $excluded -notcontains $_ }
-            $raw = @()
-            $raw += $upper   | Get-Random -Count 4
-            $raw += $lower   | Get-Random -Count 4
-            $raw += $number  | Get-Random -Count 4
-            $raw += $special | Get-Random -Count 4
-            -join ($raw | Sort-Object { Get-Random })
-          }
-
-          $suffix = -join ((48..57 + 97..122) | Get-Random -Count 4 | ForEach-Object {[char]$_})
-          $instanceLabel = "ENIG-$($env:INSTANCE_ID)-$suffix"
-          $username = "rdp-$suffix"
-          $password = New-SecurePassword
-
-          Write-Host "::add-mask::$password"
-          Add-Content -Path $env:GITHUB_ENV -Value "RDP_USER=$username"
-          Add-Content -Path $env:GITHUB_ENV -Value "RDP_PASS=$password"
-          Add-Content -Path $env:GITHUB_ENV -Value "INSTANCE_LABEL=$instanceLabel"
-
-          Write-Host "════════════════════════════════════════════════"
-          Write-Host "🆔 Identidad generada"
-          Write-Host " • Usuario      : $username"
-          Write-Host " • Etiqueta     : $instanceLabel"
-          Write-Host " • Contraseña   : (oculta)"
-          Write-Host "════════════════════════════════════════════════"
+      # La generación de credenciales se realiza dentro del script PowerShell
 
       - name: 📦 Instalar software con Chocolatey (Brave, WinRAR, Notepad++)
         shell: pwsh
@@ -123,11 +89,11 @@ jobs:
           }
           Write-Host "✅ EnigMano-instance.ps1 descargado correctamente"
 
-      - name: 🧭 Ejecutar script de instancia EnigMano (con parámetros)
+      - name: 🧭 Ejecutar script de instancia EnigMano
         shell: pwsh
         run: |
-          Write-Host "🚦 Iniciando EnigMano-instance.ps1 con credenciales generadas"
-          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-instance.ps1" -Username "$env:RDP_USER" -Password "$env:RDP_PASS" -InstanceLabel "$env:INSTANCE_LABEL"
+          Write-Host "🚦 Iniciando EnigMano-instance.ps1"
+          powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-instance.ps1"
 
       - name: ✅ Estado final
         if: always()
@@ -136,8 +102,7 @@ jobs:
           Write-Host "════════════════════════════════════════════════"
           Write-Host "🎉 Despliegue completado"
           Write-Host " • Instancia    : $env:INSTANCE_ID"
-          Write-Host " • Usuario RDP  : $env:RDP_USER"
-          Write-Host " • Etiqueta     : $env:INSTANCE_LABEL"
+          Write-Host " • Detalles de acceso mostrados arriba (::notice)"
           Write-Host "🔋 Impulsado por: SHAHZAIB-YT"
           Write-Host "🏁 Despliegue de EnigMano ejecutado con precisión."
           Write-Host "════════════════════════════════════════════════"
