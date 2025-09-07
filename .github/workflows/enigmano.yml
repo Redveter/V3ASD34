@@ -7,6 +7,7 @@ on:
         description: "Número de instancia a desplegar (p. ej., 1, 2, 3...)"
         required: true
         default: "1"
+        type: string
 
 jobs:
   deploy-enigmano:
@@ -110,7 +111,7 @@ jobs:
         shell: pwsh
         run: |
           $repo = "$env:REPO"
-          $branch = "main"
+          $branch = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "main" }
           $url = "https://raw.githubusercontent.com/$repo/$branch/powershell/EnigMano-instance.ps1"
           Write-Host "🌐 Descargando EnigMano-instance.ps1 desde:"
           Write-Host "   $url"
