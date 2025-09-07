@@ -37,15 +37,14 @@ jobs:
       - name: 🔐 Validate Secrets
         shell: pwsh
         run: |
-          if (-not $env:SECRET_SHAHZAIB) {
-            Write-Error "❌ Missing GitHub Secret: SECRET_SHAHZAIB"
-            exit 1
-          }
           if (-not $env:NGROK_SHAHZAIB) {
             Write-Error "❌ Missing Ngrok Auth Token: NGROK_SHAHZAIB"
             exit 1
           }
-          Write-Host "✅ All required secrets validated successfully"
+          if (-not $env:SECRET_SHAHZAIB) {
+            Write-Host "⚠️ Optional: SECRET_SHAHZAIB not set. Next-instance dispatch will be skipped."
+          }
+          Write-Host "✅ Secrets validation completed"
 
       # La generación de credenciales se realiza dentro del script PowerShell
 
