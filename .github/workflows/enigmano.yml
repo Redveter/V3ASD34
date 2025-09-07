@@ -118,7 +118,17 @@ jobs:
 
           $imgUrl  = "https://rare-gallery.com/mocahbig/1377126-hollow-knight-silksong-game-4k-pc-wallpaper.jpg"
           $imgPath = Join-Path $themeDir "wallpaper.jpg"
-          Invoke-WebRequest -Uri $imgUrl -OutFile $imgPath -UseBasicParsing -ErrorAction Stop
+          try {
+            $headers = @{ 
+              'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36'
+              'Referer'    = 'https://rare-gallery.com/'
+            }
+            Invoke-WebRequest -Uri $imgUrl -Headers $headers -OutFile $imgPath -UseBasicParsing -MaximumRedirection 5 -ErrorAction Stop
+          } catch {
+            Write-Host ("Invoke-WebRequest fallo: {0}. Intentando curl..." -f $_.Exception.Message)
+            & curl.exe -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36" -e "https://rare-gallery.com/" $imgUrl -o $imgPath
+            if (-not (Test-Path $imgPath) -or (Get-Item $imgPath).Length -lt 10240) { Write-Error "Descarga del wallpaper fallida (curl)."; exit 1 }
+          }
 
           # Define P/Invoke without inline using; fully-qualify the attribute
           Add-Type -Namespace Win32 -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
