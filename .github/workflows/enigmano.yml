@@ -104,11 +104,49 @@ jobs:
           New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
 
+      - name: 🖼️ Fondo de pantalla
+        shell: powershell
+        run: |
+          # script
+          $ErrorActionPreference = 'Stop'
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+          $themeDir = "$env:APPDATA\Microsoft\Windows\Themes"
+          New-Item -Path $themeDir -ItemType Directory -Force | Out-Null
+
+          $imgUrl  = "https://static0.gamerantimages.com/wordpress/wp-content/uploads/wm/2025/06/hollow-knight-silksong-hornet-close-up-over-gameplay-screenshot.jpg"
+          $imgPath = Join-Path $themeDir "wallpaper.jpg"
+          Invoke-WebRequest -Uri $imgUrl -OutFile $imgPath -UseBasicParsing
+
+          # Avoid PowerShell here-strings inside YAML by using -MemberDefinition
+          $member = '[DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
+          Add-Type -Namespace Win32 -Name Native -MemberDefinition "using System.Runtime.InteropServices; public static class Native { $member }"
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -Value $imgPath
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -Value 6
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value 0
+          [Win32.Native]::SystemParametersInfo(0x0014, 0, $imgPath, 0x0001 -bor 0x0002) | Out-Null
+
       - name: ⚡ Ejecucion del script
         shell: powershell
         run: |
           # script
-          powershell.exe -ExecutionPolicy Bypass -File ".\powershell\EnigMano-instance.ps1"
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:GITHUB_WORKSPACE
+
+          $candidatePaths = @(
+            ".\powershell\EnigMano-instance.ps1",
+            ".\EnigMano-instance.ps1"
+          )
+
+          $scriptPath = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $scriptPath) {
+            Write-Error "No se encontró 'EnigMano-instance.ps1' en el repositorio."
+            Get-ChildItem -Path . -Recurse -Filter 'EnigMano-instance.ps1' | Select-Object FullName
+            exit 1
+          }
+
+          Write-Host ("Ejecutando script: {0}" -f $scriptPath)
+          powershell.exe -ExecutionPolicy Bypass -File $scriptPath
 
       - name: 🏁 Finalizado
         if: always()
@@ -116,4 +154,4 @@ jobs:
         run: |
           # script
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          Write-Host "Developer by 🐳 ᯓ★ Nex 🪽"
+          Write-Host 'Developer by Nex'
