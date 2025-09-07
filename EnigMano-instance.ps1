@@ -42,6 +42,19 @@ $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
 $WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
 
+# === LOCK DOWN DEFAULT RUNNER USER FIRST ===
+try {
+    $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+    if ($runner) {
+        Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
+        Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+        try { Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue } catch {}
+        Log "Usuario 'runneradmin' deshabilitado, removido de RDP y eliminado (si fue posible)"
+    }
+} catch {
+    Log "No se pudo modificar 'runneradmin' (fase inicial): $($_.Exception.Message)"
+}
+
 # === TUNNEL SETUP ===
 Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
 Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
@@ -71,25 +84,9 @@ Log "Canal de transporte seguro iniciado"
  Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
  Log "Protocolos de acceso habilitados para la instancia"
 
- # (Opcional) Restringir/Eliminar acceso del usuario por defecto de GitHub Actions (runneradmin)
- try {
-     $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-     if ($runner) {
-         # Evitar acceso por RDP y deshabilitar la cuenta para que no pueda iniciar sesion futura
-         Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
-         Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-         try { Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue } catch {}
-         Log "Usuario 'runneradmin' deshabilitado, removido de RDP y eliminado (si fue posible)"
-     } else {
-         Log "Usuario 'runneradmin' no existe en este entorno"
-     }
- } catch {
-     Log "No se pudo modificar 'runneradmin': $($_.Exception.Message)"
- }
-
-# === WALLPAPER (aplicacion al iniciar sesion del usuario) ===
+# === WALLPAPER (estilo personalize.ps1, sin tareas ni lanzadores) ===
 try {
-    Log "Configurando wallpaper para usuario '$Username'"
+    Log "Aplicando wallpaper al estilo personalize.ps1 (preconfiguracion para Nex)"
 
     $wpRoot = "C:\\ProgramData\\EnigMano"
     New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
@@ -98,45 +95,30 @@ try {
     if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.jpg' }
     $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
 
-    try {
-        $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
-        Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
-        Log "Wallpaper descargado en $wpPath"
-    } catch {
-        Log "No se pudo descargar el wallpaper: $($_.Exception.Message)"
-    }
+    $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
+    Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
+    Log "Wallpaper descargado en $wpPath"
 
     if (Test-Path $wpPath) {
-        $startupDir = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-        New-Item -Path $startupDir -ItemType Directory -Force | Out-Null
+        # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
+        $defaultHive = 'HKU\\DefaultUser'
+        $defaultNt   = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
+        try {
+            & reg.exe load $defaultHive "$defaultNt" | Out-Null
+            $defDesk = 'HKU:\DefaultUser\Control Panel\Desktop'
+            New-Item -Path 'HKU:\DefaultUser\Control Panel' -Name 'Desktop' -Force | Out-Null
+            Set-ItemProperty -Path $defDesk -Name Wallpaper -Value $wpPath
+            Set-ItemProperty -Path $defDesk -Name WallpaperStyle -Value 10
+            Set-ItemProperty -Path $defDesk -Name TileWallpaper -Value 0
+            Log "Valores por defecto establecidos en el perfil base (Default)"
+        } finally {
+            & reg.exe unload $defaultHive | Out-Null
+        }
 
-        # Crear script PowerShell que aplica el wallpaper en HKCU y refresca
-        $psApplyPath = Join-Path $wpRoot "ApplyEnigManoWallpaper.ps1"
-        $psContent = @"
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value '$wpPath'
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 10
-Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
-rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
-
-# Crear carpeta Data en el escritorio del usuario actual (Nex) si no existe
-$desktop = [Environment]::GetFolderPath('Desktop')
-$dataDir = Join-Path $desktop 'Data'
-if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
-"@
-        Set-Content -Path $psApplyPath -Value $psContent -Encoding UTF8
-
-        # Crear lanzador .cmd en Inicio de Todos los usuarios
-        $cmdPath = Join-Path $startupDir "ApplyEnigManoWallpaper.cmd"
-        $cmdContent = @"
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "$psApplyPath"
-del "%~f0" >nul 2>&1
-"@
-        Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
-        Log "Scripts de inicio creados: $psApplyPath y $cmdPath"
+        # No aplicar en HKCU aqui para evitar afectar al contexto del runner; Nex lo heredara al iniciar sesion
     }
 } catch {
-    Log "Error general al configurar el wallpaper: $($_.Exception.Message)"
+    Log "Error al aplicar wallpaper: $($_.Exception.Message)"
 }
 
  try {
