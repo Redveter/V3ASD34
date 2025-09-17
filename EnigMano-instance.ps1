@@ -144,11 +144,14 @@ try {
     Log ("Aplicando wallpaper al estilo personalize.ps1 (preconfiguracion para {0})" -f $Username)
 
     $wpRoot = "C:\\Users\\Public\\$Username"
-    New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
-
+    if ([string]::IsNullOrWhiteSpace($wpRoot)) { $wpRoot = "C:\\Users\\Public\\Nex" }
+    try { New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null } catch {}
     $ext = [IO.Path]::GetExtension(([Uri]$WALLPAPER_URL).AbsolutePath)
     if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.jpg' }
-    $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
+    if ($ext -and ($ext[0] -ne '.')) { $ext = '.' + $ext }
+    $wpFile = "Silksong$ext"
+    if ([string]::IsNullOrWhiteSpace($wpRoot)) { throw "wpRoot no valido" }
+    $wpPath = Join-Path -Path $wpRoot -ChildPath $wpFile
 
     $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
     Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
