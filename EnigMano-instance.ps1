@@ -243,23 +243,63 @@ public static class Win32 {
             }
         } catch {
             Log ("No se pudo aplicar en HKCU durante la instalacion: {0}" -f $_.Exception.Message)
-        }
     }
 } catch {
     Log "Error al aplicar wallpaper: $($_.Exception.Message)"
 }
 
- try {
-     if ($InstanceLabel) {
-         $currentName = (Get-ComputerInfo).CsName
-         if ($currentName -ne $InstanceLabel) {
-             Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
+# === SOFTWARE INSTALLATION (Chocolatey + Apps) ===
+try {
+    Log "Instalando software base (Chocolatey, Brave, WinRAR, Notepad++)"
+    $ProgressPreference = 'SilentlyContinue'
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        choco --version | Out-Null
+        Log "Chocolatey instalado"
+    } else {
+        Log "Chocolatey ya presente"
+    }
+
+    function Install-App {
+        param([string]$Id,[string]$Nombre)
+        choco install $Id -y --no-progress *> $null
+        $code = $LASTEXITCODE
+        if ($code -in 0,3010) { Log ("OK: {0} instalado" -f $Nombre) }
+        else { Log ("AVISO: {0} pudo no instalarse correctamente (codigo {1})" -f $Nombre,$code) }
+    }
+
+    Install-App -Id 'brave' -Nombre 'Brave'
+    Install-App -Id 'winrar' -Nombre 'WinRAR'
+    Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
+
+    # Politica HKLM para forzar uBlock Origin en Brave
+    try {
+        $policyPath = "HKLM:\\Software\\Policies\\BraveSoftware\\Brave\\ExtensionInstallForcelist"
+        New-Item -Path $policyPath -Force | Out-Null
+        New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
+        Log "Politica uBlock Origin para Brave aplicada"
+    } catch {
+        Log ("No se pudo aplicar politica de Brave: {0}" -f $_.Exception.Message)
+    }
+
+} catch {
+    Log ("Error durante instalacion de software: {0}" -f $_.Exception.Message)
+}
+
+try {
+    if ($InstanceLabel) {
+        $currentName = (Get-ComputerInfo).CsName
+        if ($currentName -ne $InstanceLabel) {
+            Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
             Log "Computer name set to '$InstanceLabel' (will apply after restart)"
-         }
-     }
- } catch {
-     Log "Failed to change computer name in this environment: $($_.Exception.Message)"
- }
+        }
+    }
+} catch {
+    Log "Failed to change computer name in this environment: $($_.Exception.Message)"
+}
 
 # === REGION SCAN LOOP ===
 $tunnel = $null
