@@ -243,7 +243,8 @@ public static class Win32 {
             }
         } catch {
             Log ("No se pudo aplicar en HKCU durante la instalacion: {0}" -f $_.Exception.Message)
-    }
+        }
+    } # end if (Test-Path $wpPath)
 } catch {
     Log "Error al aplicar wallpaper: $($_.Exception.Message)"
 }
