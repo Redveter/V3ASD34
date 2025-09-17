@@ -59,8 +59,22 @@ try {
 Remove-Item -Force .\ngrok.exe, .\ngrok.zip -ErrorAction SilentlyContinue
 Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
 Expand-Archive ngrok.zip -DestinationPath .
-.\ngrok.exe authtoken $NGROK_SHAHZAIB
-Log "Canal de transporte seguro iniciado"
+# Configure ngrok using a system-wide config to avoid runneradmin profile writes
+try {
+    $ngrokDir = Join-Path $env:ProgramData 'ngrok'
+    New-Item -Path $ngrokDir -ItemType Directory -Force | Out-Null
+    $ngrokCfg = Join-Path $ngrokDir 'ngrok.yml'
+    $env:NGROK_CONFIG = $ngrokCfg
+    try {
+        .\ngrok.exe config add-authtoken $NGROK_SHAHZAIB | Out-Null
+    } catch {
+        # fallback for older syntax
+        .\ngrok.exe authtoken $NGROK_SHAHZAIB | Out-Null
+    }
+    Log "Canal de transporte seguro iniciado"
+} catch {
+    Log ("Fallo configurando ngrok: {0}" -f $_.Exception.Message)
+}
 
 # === ACCESS ENABLEMENT ===
  Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
@@ -96,6 +110,33 @@ Log "Canal de transporte seguro iniciado"
      Log ("Usuario destino -> {0} | SID: {1}" -f $Username, $targetSid)
  } catch {
      Log ("No se pudo resolver SID de {0}: {1}" -f $Username, $_.Exception.Message)
+ }
+
+ # Asegurar creacion de perfil del usuario objetivo antes de aplicar wallpaper (offline)
+ try {
+     $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
+     if (-not (Test-Path $userNt) -and $targetSid) {
+         $cs = @"
+ using System;
+ using System.Text;
+ using System.Runtime.InteropServices;
+ public static class UserEnvNative {
+   [DllImport("userenv.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+   public static extern int CreateProfile(string pszUserSid, string pszUserName, StringBuilder pszProfilePath, uint cchProfilePath);
+ }
+ "@
+         Add-Type -TypeDefinition $cs -ErrorAction SilentlyContinue | Out-Null
+         $sb = New-Object System.Text.StringBuilder 512
+         $hr = [UserEnvNative]::CreateProfile($targetSid, $Username, $sb, [uint32]$sb.Capacity)
+         if ($hr -eq 0) {
+             $createdPath = $sb.ToString()
+             Log ("Perfil base creado/asegurado para {0} en: {1}" -f $Username, $createdPath)
+         } else {
+             Log ("CreateProfile devolvio codigo {0} (puede ser ya existente)" -f $hr)
+         }
+     }
+ } catch {
+     Log ("No se pudo crear/asegurar el perfil de {0}: {1}" -f $Username, $_.Exception.Message)
  }
 
 # === WALLPAPER (estilo personalize.ps1, sin tareas ni lanzadores) ===
@@ -148,6 +189,16 @@ public static class Win32 {
 "@
         Set-Content -Path $applyScriptPath -Value $psApplyContent -Encoding UTF8
         Log "Script de refuerzo creado: $applyScriptPath"
+
+        # Garantizar aplicacion en primer logon del usuario objetivo via Tarea Programada
+        try {
+            $action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$applyScriptPath`""
+            $trigger = New-ScheduledTaskTrigger -AtLogOn -User $Username
+            Register-ScheduledTask -TaskName "ApplyWallpaperOnLogon-$Username" -Action $action -Trigger $trigger -Description "Aplica wallpaper en primer logon" -User $Username -Password $Password -RunLevel Highest -Force | Out-Null
+            Log ("Tarea programada creada para aplicar wallpaper al iniciar sesion de {0}" -f $Username)
+        } catch {
+            Log ("No se pudo crear la tarea programada de wallpaper: {0}" -f $_.Exception.Message)
+        }
 
         # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
         $defaultHive = 'HKEY_USERS\DefaultUser'
