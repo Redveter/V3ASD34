@@ -70,7 +70,17 @@ jobs:
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           Write-Host 'Tokens verificados'
 
-      
+      - name: 📦 Preparacion de Chocolatey
+        shell: powershell
+        run: |
+          # script
+          Write-Host 'Preparando Chocolatey para instalacion posterior...'
+          $ProgressPreference = 'SilentlyContinue'
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
+          choco --version *> $null
+          Write-Host 'Chocolatey listo para uso posterior'
 
       - name: 🪙 Extensión - uBlock Origin (Brave)
         shell: powershell
@@ -93,80 +103,34 @@ jobs:
           Set-Location $env:GITHUB_WORKSPACE
 
           $candidatePaths = @(
-            ".\Powershell\EnigMano-instance.ps1",
             ".\powershell\EnigMano-instance.ps1",
             ".\EnigMano-instance.ps1"
           )
 
           $scriptPath = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-          
-          # Validar que el archivo detectado no contenga sintaxis YAML (evita error ${ { } })
-          if ($scriptPath) {
-            try {
-              $rawSample = (Get-Content -Path $scriptPath -TotalCount 50 -ErrorAction Stop) -join [Environment]::NewLine
-              if ($rawSample -like '*${{*' -or $rawSample -like 'name:*') {
-                Write-Host "Archivo local parece YAML/Workflow. Se forzará descarga del script correcto..."
-                $scriptPath = $null
-              }
-            } catch {
-              $scriptPath = $null
-            }
-          }
-
           if (-not $scriptPath) {
-            $downloadPath = Join-Path $env:RUNNER_TEMP "EnigMano-instance.ps1"
-
-            $rawBase = "https://raw.githubusercontent.com/$env:REPO/$env:BRANCH"
-            $scriptUrlCandidates = @()
-            if ($env:SCRIPT_URL) { $scriptUrlCandidates += $env:SCRIPT_URL }
-            $scriptUrlCandidates += @(
-              "$rawBase/Powershell/EnigMano-instance.ps1",
-              "$rawBase/powershell/EnigMano-instance.ps1",
-              "$rawBase/EnigMano-instance.ps1"
-            )
-
-            $downloaded = $false
-            foreach ($u in $scriptUrlCandidates) {
-              Write-Host ("Intentando descargar: {0}" -f $u)
-              try {
-                Invoke-WebRequest -Uri $u -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
-                $downloaded = $true
-                break
-              } catch {}
+            if (-not $env:SCRIPT_URL) {
+              Write-Error "No se encontró 'EnigMano-instance.ps1' local y SCRIPT_URL no está definido."
+              Get-ChildItem -Path . -Recurse -Filter 'EnigMano-instance.ps1' | Select-Object FullName
+              exit 1
             }
 
-            if (-not $downloaded) {
+            $downloadPath = Join-Path $env:RUNNER_TEMP "EnigMano-instance.ps1"
+            Write-Host ("Descargando script desde {0} a {1}" -f $env:SCRIPT_URL, $downloadPath)
+            try {
+              Invoke-WebRequest -Uri $env:SCRIPT_URL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+            } catch {
               Write-Host "Descarga directa falló. Intentando vía API de GitHub..."
               if ($env:SECRET_SHAHZAIB) {
+                $apiUrl = "https://api.github.com/repos/$env:REPO/contents/EnigMano-instance.ps1?ref=$env:BRANCH"
                 $headers = @{ Authorization = "Bearer $env:SECRET_SHAHZAIB"; 'User-Agent' = 'EnigMano-Runner'; Accept = 'application/vnd.github.v3.raw' }
-                $apiUrls = @(
-                  "https://api.github.com/repos/$env:REPO/contents/Powershell/EnigMano-instance.ps1?ref=$env:BRANCH",
-                  "https://api.github.com/repos/$env:REPO/contents/powershell/EnigMano-instance.ps1?ref=$env:BRANCH",
-                  "https://api.github.com/repos/$env:REPO/contents/EnigMano-instance.ps1?ref=$env:BRANCH"
-                )
-                foreach ($apiUrl in $apiUrls) {
-                  try {
-                    Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
-                    $downloaded = $true
-                    break
-                  } catch {}
-                }
+                Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
               } else {
                 Write-Error "No se pudo descargar el script y no hay token para usar la API de GitHub."
                 throw
               }
             }
-
             if (-not (Test-Path $downloadPath)) { Write-Error "Descarga del script fallida."; exit 1 }
-
-            # Validación final de contenido descargado
-            try {
-              $rawSample = (Get-Content -Path $downloadPath -TotalCount 50 -ErrorAction Stop) -join [Environment]::NewLine
-              if ($rawSample -like '*${{*' -or $rawSample -like 'name:*') {
-                Write-Error "El archivo descargado no es un script PowerShell válido (parece YAML)."
-                exit 1
-              }
-            } catch {}
             $scriptPath = $downloadPath
           }
 
