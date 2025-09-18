@@ -42,18 +42,15 @@ $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
 $WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
 
-# === ELIMINAR RUNNERADMIN Y CREAR NEX ===
+# === DESHABILITAR RUNNERADMIN PARA RDP Y HACER NEX PRINCIPAL ===
 try {
     $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
     if ($runner) {
         Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
-        Remove-LocalGroupMember -Group 'Administrators' -Member 'runneradmin' -ErrorAction SilentlyContinue
-        Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-        Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-        Log "Usuario 'runneradmin' eliminado completamente"
+        Log "Usuario 'runneradmin' removido de RDP, Nex sera el principal"
     }
 } catch {
-    Log "Error al eliminar 'runneradmin': $($_.Exception.Message)"
+    Log "Error al modificar 'runneradmin': $($_.Exception.Message)"
 }
 
 # Crear usuario Nex inmediatamente
