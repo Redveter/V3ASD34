@@ -70,6 +70,21 @@ jobs:
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           Write-Host 'Tokens verificados'
 
+      
+
+      - name: 🪙 Extensión - uBlock Origin (Brave)
+        shell: powershell
+        run: |
+          Write-Host 'Politica uBlock Origin (Brave)'
+          $ProgressPreference = 'SilentlyContinue'
+          Write-Host 'Aplicando directiva para forzar la instalacion de uBlock Origin en Brave...'
+          $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
+          New-Item -Path $policyPath -Force | Out-Null
+          New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
+          Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
+
+      
+
       - name: ⚡ Ejecucion del script
         shell: powershell
         run: |
