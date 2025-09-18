@@ -79,11 +79,15 @@ try {
 # === ACCESS ENABLEMENT ===
  Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
  Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
- Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
+ Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0
+ Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "SecurityLayer" -Value 0 -Type DWord
+ Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 2 -Type DWord
+ Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Profile Any
 
  # Ensure the Remote Desktop service is running and set to Automatic
  Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
  Start-Service -Name TermService -ErrorAction SilentlyContinue
+ try { Restart-Service -Name TermService -Force -ErrorAction SilentlyContinue } catch {}
 
  $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
  $existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
@@ -111,6 +115,38 @@ try {
  } catch {
      Log ("No se pudo resolver SID de {0}: {1}" -f $Username, $_.Exception.Message)
  }
+
+# Asegurar creacion de perfil del usuario objetivo antes de aplicar wallpaper (offline)
+try {
+    $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
+    if (-not (Test-Path $userNt) -and $targetSid) {
+        $cs = @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class UserEnvNative {
+  [DllImport("userenv.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern int CreateProfile(string pszUserSid, string pszUserName, StringBuilder pszProfilePath, uint cchProfilePath);
+}
+"@
+        Add-Type -TypeDefinition $cs -ErrorAction SilentlyContinue | Out-Null
+        $sb = New-Object System.Text.StringBuilder 512
+        $hr = [UserEnvNative]::CreateProfile($targetSid, $Username, $sb, [uint32]$sb.Capacity)
+        if ($hr -eq 0) {
+            $createdPath = $sb.ToString()
+            Log ("Perfil base creado/asegurado para {0} en: {1}" -f $Username, $createdPath)
+        } else {
+            Log ("CreateProfile devolvio codigo {0} (puede ser ya existente)" -f $hr)
+        }
+        # Re-evaluar la ruta del hive tras CreateProfile
+        $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
+        Log ("Verificacion de hive de {0}: {1} (existe: {2})" -f $Username, $userNt, (Test-Path $userNt))
+    } else {
+        Log ("Hive de {0} ya existe: {1}" -f $Username, $userNt)
+    }
+} catch {
+    Log ("No se pudo crear/asegurar el perfil de {0}: {1}" -f $Username, $_.Exception.Message)
+}
 
  # === WALLPAPER (estilo personalize.ps1, sin tareas ni lanzadores) ===
 try {
