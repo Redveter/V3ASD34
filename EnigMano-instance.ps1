@@ -42,18 +42,8 @@ $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
 $WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
 
-# === DESHABILITAR RUNNERADMIN PARA RDP Y HACER NEX PRINCIPAL ===
-try {
-    $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
-    if ($runner) {
-        Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
-        Log "Usuario 'runneradmin' removido de RDP, Nex sera el principal"
-    }
-} catch {
-    Log "Error al modificar 'runneradmin': $($_.Exception.Message)"
-}
-
-# Crear usuario Nex inmediatamente
+# === CREAR NEX COMO USUARIO PRINCIPAL ===
+# Crear usuario Nex primero
 $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
 $existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
 if ($existing) {
@@ -65,6 +55,17 @@ if ($existing) {
 }
 Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username -ErrorAction SilentlyContinue
 Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
+Log "Usuario $Username configurado como principal con acceso RDP"
+
+# Mantener runneradmin pero como secundario (no lo removemos del RDP para evitar problemas)
+try {
+    $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+    if ($runner) {
+        Log "Usuario 'runneradmin' mantenido, $Username es ahora el principal"
+    }
+} catch {
+    Log "Error al verificar 'runneradmin': $($_.Exception.Message)"
+}
 
 # Obtener SID del usuario Nex para configuraciones
 try {
