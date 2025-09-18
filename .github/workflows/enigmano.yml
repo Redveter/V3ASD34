@@ -70,45 +70,6 @@ jobs:
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           Write-Host 'Tokens verificados'
 
-      - name: 📦 Instalacion de software
-        shell: powershell
-        run: |
-          # script
-          Write-Host 'Instalacion de software'
-          $ProgressPreference = 'SilentlyContinue'
-          Write-Host 'Preparando Chocolatey...'
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
-          choco --version *> $null
-          Write-Host 'Chocolatey listo'
-
-          function Install-App {
-            param([string]$Id,[string]$Nombre)
-            choco install $Id -y --no-progress *> $null
-            $code = $LASTEXITCODE
-            if ($code -in 0,3010) { Write-Host ("OK: {0} instalado" -f $Nombre) }
-            elseif ($code -eq 0)  { Write-Host ("OK: {0} instalado" -f $Nombre) }
-            else { Write-Host ("AVISO: {0} pudo no instalarse correctamente (codigo {1})" -f $Nombre,$code) }
-          }
-
-          Install-App -Id 'brave' -Nombre 'Brave'
-          Install-App -Id 'winrar' -Nombre 'WinRAR'
-          Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
-
-      - name: 🪙 Extensión - uBlock Origin (Brave)
-        shell: powershell
-        run: |
-          Write-Host 'Politica uBlock Origin (Brave)'
-          $ProgressPreference = 'SilentlyContinue'
-          Write-Host 'Aplicando directiva para forzar la instalacion de uBlock Origin en Brave...'
-          $policyPath = "HKLM:\Software\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
-          New-Item -Path $policyPath -Force | Out-Null
-          New-ItemProperty -Path $policyPath -Name "1" -Value "cjpalhdlnbpafiamejdnhcphjbkeiagm;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          Write-Host 'Directiva aplicada. uBlock Origin se instalara al iniciar Brave.'
-
-      
-
       - name: ⚡ Ejecucion del script
         shell: powershell
         run: |
