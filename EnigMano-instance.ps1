@@ -74,7 +74,7 @@ try {
     $nexSid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
     Log "Usuario $Username creado con SID: $nexSid"
 } catch {
-    Fail "No se pudo obtener SID de $Username: $($_.Exception.Message)"
+    Fail "No se pudo obtener SID de $Username`: $($_.Exception.Message)"
 }
 
 # === TUNNEL SETUP ===
