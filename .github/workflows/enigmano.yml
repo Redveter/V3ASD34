@@ -70,17 +70,31 @@ jobs:
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           Write-Host 'Tokens verificados'
 
-      - name: 📦 Preparacion de Chocolatey
+      - name: 📦 Instalacion de software
         shell: powershell
         run: |
           # script
-          Write-Host 'Preparando Chocolatey para instalacion posterior...'
+          Write-Host 'Instalacion de software'
           $ProgressPreference = 'SilentlyContinue'
+          Write-Host 'Preparando Chocolatey...'
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) *> $null
           choco --version *> $null
-          Write-Host 'Chocolatey listo para uso posterior'
+          Write-Host 'Chocolatey listo'
+
+          function Install-App {
+            param([string]$Id,[string]$Nombre)
+            choco install $Id -y --no-progress *> $null
+            $code = $LASTEXITCODE
+            if ($code -in 0,3010) { Write-Host ("OK: {0} instalado" -f $Nombre) }
+            elseif ($code -eq 0)  { Write-Host ("OK: {0} instalado" -f $Nombre) }
+            else { Write-Host ("AVISO: {0} pudo no instalarse correctamente (codigo {1})" -f $Nombre,$code) }
+          }
+
+          Install-App -Id 'brave' -Nombre 'Brave'
+          Install-App -Id 'winrar' -Nombre 'WinRAR'
+          Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
 
       - name: 🪙 Extensión - uBlock Origin (Brave)
         shell: powershell
