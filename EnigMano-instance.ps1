@@ -42,37 +42,17 @@ $BRANCH          = "main"
 $RUNNER_ENV      = $env:RUNNER_ENV
 $WALLPAPER_URL   = if ($env:WALLPAPER_URL) { $env:WALLPAPER_URL } else { 'https://wallpapers.com/images/featured/hollow-knight-82dd1lgxpbzdrhqw.jpg' }
 
-# === CREAR NEX COMO USUARIO PRINCIPAL ===
-# Crear usuario Nex primero
-$secPass = ConvertTo-SecureString $Password -AsPlainText -Force
-$existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
-if ($existing) {
-    Set-LocalUser -Name $Username -Password $secPass
-    Log "Usuario local actualizado: $Username"
-} else {
-    New-LocalUser -Name $Username -Password $secPass -AccountNeverExpires | Out-Null
-    Log "Usuario local creado: $Username"
-}
-Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username -ErrorAction SilentlyContinue
-Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
-Log "Usuario $Username configurado como principal con acceso RDP"
-
-# Mantener runneradmin pero como secundario (no lo removemos del RDP para evitar problemas)
+# === LOCK DOWN DEFAULT RUNNER USER FIRST ===
 try {
     $runner = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
     if ($runner) {
-        Log "Usuario 'runneradmin' mantenido, $Username es ahora el principal"
+        Remove-LocalGroupMember -Group 'Remote Desktop Users' -Member 'runneradmin' -ErrorAction SilentlyContinue
+        Disable-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+        try { Remove-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue } catch {}
+        Log "Usuario 'runneradmin' deshabilitado, removido de RDP y eliminado (si fue posible)"
     }
 } catch {
-    Log "Error al verificar 'runneradmin': $($_.Exception.Message)"
-}
-
-# Obtener SID del usuario Nex para configuraciones
-try {
-    $nexSid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
-    Log "Usuario $Username creado con SID: $nexSid"
-} catch {
-    Fail "No se pudo obtener SID de $Username`: $($_.Exception.Message)"
+    Log "No se pudo modificar 'runneradmin' (fase inicial): $($_.Exception.Message)"
 }
 
 # === TUNNEL SETUP ===
@@ -83,87 +63,203 @@ Expand-Archive ngrok.zip -DestinationPath .
 Log "Canal de transporte seguro iniciado"
 
 # === ACCESS ENABLEMENT ===
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
-Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
-Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
-Start-Service -Name TermService -ErrorAction SilentlyContinue
-Log "Protocolos de acceso habilitados para $Username"
+ Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+ Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+ Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
 
-# === INSTALACION DE SOFTWARE PARA NEX ===
-try {
-    Log "Instalando software para el usuario $Username"
-    
-    # Crear perfil de usuario si no existe
-    $userProfile = "C:\Users\$Username"
-    if (-not (Test-Path $userProfile)) {
-        # Forzar creación del perfil de usuario
-        $null = New-Item -Path $userProfile -ItemType Directory -Force
-        Log "Perfil de usuario creado: $userProfile"
-    }
-    
-    # Instalar software usando Chocolatey
-    function Install-App {
-        param([string]$Id,[string]$Nombre)
-        choco install $Id -y --no-progress *> $null
-        $code = $LASTEXITCODE
-        if ($code -in 0,3010) { 
-            Log "OK: $Nombre instalado para $Username" 
-        } else { 
-            Log "AVISO: $Nombre pudo no instalarse correctamente (codigo $code)" 
-        }
-    }
-    
-    Install-App -Id 'brave' -Nombre 'Brave'
-    Install-App -Id 'winrar' -Nombre 'WinRAR'
-    Install-App -Id 'notepadplusplus' -Nombre 'Notepad++'
-    
-} catch {
-    Log "Error al instalar software: $($_.Exception.Message)"
-}
+ # Ensure the Remote Desktop service is running and set to Automatic
+ Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
+ Start-Service -Name TermService -ErrorAction SilentlyContinue
 
-# === CONFIGURACION DE WALLPAPER PARA NEX ===
+ $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
+ $existing = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
+ if ($existing) {
+     Set-LocalUser -Name $Username -Password $secPass
+     Log "Usuario local actualizado: $Username"
+ } else {
+     New-LocalUser -Name $Username -Password $secPass -AccountNeverExpires | Out-Null
+     Log "Usuario local creado: $Username"
+ }
+ Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username -ErrorAction SilentlyContinue
+ Add-LocalGroupMember -Group "Administrators" -Member $Username -ErrorAction SilentlyContinue
+ Log "Protocolos de acceso habilitados para la instancia"
+
+ # Identidad de sesion actual y del usuario destino (para trazabilidad)
+ try {
+     $currUser = $env:USERNAME
+     $currSid  = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+     Log ("Sesion actual -> Usuario: {0} | SID: {1}" -f $currUser, $currSid)
+ } catch {}
+
+ try {
+     $targetSid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+     Log ("Usuario destino -> {0} | SID: {1}" -f $Username, $targetSid)
+ } catch {
+     Log ("No se pudo resolver SID de {0}: {1}" -f $Username, $_.Exception.Message)
+ }
+
+# === WALLPAPER (estilo personalize.ps1, sin tareas ni lanzadores) ===
 try {
-    Log "Configurando wallpaper directamente para $Username"
-    
-    # Descargar wallpaper
-    $wpPath = "C:\Users\Public\Silksong.jpg"
-    $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    Log ("Aplicando wallpaper al estilo personalize.ps1 (preconfiguracion para {0})" -f $Username)
+
+    $wpRoot = "C:\\Users\\Public\\$Username"
+    New-Item -Path $wpRoot -ItemType Directory -Force | Out-Null
+
+    $ext = [IO.Path]::GetExtension(([Uri]$WALLPAPER_URL).AbsolutePath)
+    if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.jpg' }
+    $wpPath = Join-Path $wpRoot ("Silksong" + $ext)
+
+    $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0 Safari/537.36' }
     Invoke-WebRequest -Uri $WALLPAPER_URL -Headers $headers -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
-    Log "Wallpaper descargado: $wpPath"
-    
-    # Configurar en el perfil Default para que se herede
-    $defaultHive = 'HKEY_USERS\DefaultUser'
-    $defaultNt = "C:\Users\Default\NTUSER.DAT"
-    try {
-        & reg.exe load "$defaultHive" "$defaultNt" | Out-Null
-        & reg.exe add "$defaultHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
-        & reg.exe add "$defaultHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
-        & reg.exe add "$defaultHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
-        Log "Wallpaper configurado en perfil Default"
-    } finally {
-        & reg.exe unload "$defaultHive" | Out-Null
-    }
-    
-    # Crear carpeta Data en Desktop del perfil Default
-    $defaultDesktop = "C:\Users\Default\Desktop"
-    New-Item -Path "$defaultDesktop\Data" -ItemType Directory -Force | Out-Null
-    
-} catch {
-    Log "Error al configurar wallpaper: $($_.Exception.Message)"
-}
+    Log "Wallpaper descargado en $wpPath"
 
+    if (Test-Path $wpPath) {
+        # Bandera para habilitar/deshabilitar refuerzo RunOnce sin tareas/launchers (por defecto: habilitado)
+        $enableRunOnce = $env:APPLY_WALLPAPER_RUNONCE
+        if ([string]::IsNullOrWhiteSpace($enableRunOnce)) { $enableRunOnce = 'true' }
+        $enableRunOnce = ($enableRunOnce -match '^(?i:true|1|yes)$')
+
+        # Script de refuerzo que aplica el wallpaper en HKCU al iniciar sesion del usuario (via RunOnce)
+        $applyScriptPath = Join-Path $wpRoot 'ApplyUserWallpaper.ps1'
+        $psApplyContent = @"
+param()
 try {
-    if ($InstanceLabel) {
-        $currentName = (Get-ComputerInfo).CsName
-        if ($currentName -ne $InstanceLabel) {
-            Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
-            Log "Computer name set to '$InstanceLabel' (will apply after restart)"
+  $img    = '$wpPath'
+  $themes = Join-Path $env:APPDATA 'Microsoft\Windows\Themes'
+  New-Item -Path $themes -ItemType Directory -Force | Out-Null
+  Copy-Item -Path $img -Destination (Join-Path $themes 'TranscodedWallpaper') -Force
+
+  $reg = 'HKCU:\Control Panel\Desktop'
+  Set-ItemProperty -Path $reg -Name Wallpaper -Value $img
+  Set-ItemProperty -Path $reg -Name WallpaperStyle -Value 10
+  Set-ItemProperty -Path $reg -Name TileWallpaper -Value 0
+
+  $code = @'
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+  Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue | Out-Null
+  [Win32]::SystemParametersInfo(0x0014, 0, $img, 0x0001 -bor 0x0002) | Out-Null
+  rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+} catch {}
+"@
+        Set-Content -Path $applyScriptPath -Value $psApplyContent -Encoding UTF8
+        Log "Script de refuerzo creado: $applyScriptPath"
+
+        # Preconfigurar para nuevas sesiones montando el perfil por defecto (C:\Users\Default)
+        $defaultHive = 'HKEY_USERS\DefaultUser'
+        $defaultNt   = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
+        try {
+            & reg.exe load "$defaultHive" "$defaultNt" | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
+            & reg.exe add "$defaultHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
+            Log "Valores por defecto establecidos en el perfil base (Default)"
+
+            if ($enableRunOnce) {
+                $runOnceCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$applyScriptPath`""
+                & reg.exe add "$defaultHive\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "ApplyWallpaperOnce" /t REG_SZ /d "$runOnceCmd" /f | Out-Null
+                Log "RunOnce heredado configurado en perfil Default"
+            }
+        } finally {
+            & reg.exe unload "$defaultHive" | Out-Null
+        }
+
+        # Copiar tambien a TranscodedWallpaper del perfil Default para que se herede el archivo
+        try {
+            $defThemes = Join-Path $env:SystemDrive 'Users\Default\AppData\Roaming\Microsoft\Windows\Themes'
+            New-Item -Path $defThemes -ItemType Directory -Force | Out-Null
+            Copy-Item -Path $wpPath -Destination (Join-Path $defThemes 'TranscodedWallpaper') -Force
+            Log "TranscodedWallpaper precreado en perfil Default"
+        } catch {
+            Log ("No se pudo preparar TranscodedWallpaper en Default: {0}" -f $_.Exception.Message)
+        }
+
+        # Si el perfil de $Username ya existe, intente preconfigurarlo directamente usando su SID real
+        $userNt = Join-Path $env:SystemDrive ("Users\{0}\NTUSER.DAT" -f $Username)
+        if (Test-Path $userNt) {
+            try {
+                $sid = (New-Object System.Security.Principal.NTAccount($Username)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                $targetHive = "HKEY_USERS\$sid"
+                & reg.exe load "$targetHive" "$userNt" | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f | Out-Null
+                & reg.exe add "$targetHive\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f | Out-Null
+                Log ("Perfil existente de {0} preconfigurado exitosamente (SID: {1})" -f $Username, $sid)
+
+                if ($enableRunOnce) {
+                    $runOnceCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$applyScriptPath`""
+                    & reg.exe add "$targetHive\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "ApplyWallpaperOnce" /t REG_SZ /d "$runOnceCmd" /f | Out-Null
+                    Log ("RunOnce configurado para {0}" -f $Username)
+                }
+
+            } catch {
+                Log ("No se pudo preconfigurar el hive de {0}: {1}" -f $Username, $_.Exception.Message)
+            } finally {
+                try { & reg.exe unload "$targetHive" | Out-Null } catch {}
+            }
+
+            # Adicional: copiar TranscodedWallpaper al perfil del usuario si ya existe
+            try {
+                $userThemes = Join-Path $env:SystemDrive ("Users\{0}\AppData\Roaming\Microsoft\Windows\Themes" -f $Username)
+                New-Item -Path $userThemes -ItemType Directory -Force | Out-Null
+                Copy-Item -Path $wpPath -Destination (Join-Path $userThemes 'TranscodedWallpaper') -Force
+                Log "TranscodedWallpaper copiado al perfil existente de $Username"
+            } catch {
+                Log ("No se pudo copiar TranscodedWallpaper al perfil de {0}: {1}" -f $Username, $_.Exception.Message)
+            }
+        }
+
+        # Crear carpeta Data en el Desktop del perfil por defecto (se heredara a Nex en primer logon)
+        $defaultDesktop = Join-Path $env:SystemDrive 'Users\Default\Desktop'
+        try { New-Item -Path (Join-Path $defaultDesktop 'Data') -ItemType Directory -Force | Out-Null } catch {}
+
+        # Nota: Se omite establecer politica HKLM para evitar errores de privilegios en runners hospedados
+
+        # Si el script corre ya en la sesion de destino ($Username), aplicar de inmediato en HKCU
+        try {
+            if ($env:USERNAME -and ($env:USERNAME -ieq $Username)) {
+                $themes     = Join-Path $env:APPDATA 'Microsoft\\Windows\\Themes'
+                $transcoded = Join-Path $themes 'TranscodedWallpaper'
+                New-Item -Path $themes -ItemType Directory -Force | Out-Null
+                Copy-Item -Path $wpPath -Destination $transcoded -Force
+
+                $reg = 'HKCU:\\Control Panel\\Desktop'
+                Set-ItemProperty -Path $reg -Name Wallpaper -Value $transcoded
+                Set-ItemProperty -Path $reg -Name WallpaperStyle -Value 10
+                Set-ItemProperty -Path $reg -Name TileWallpaper -Value 0
+
+                $member = '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'
+                Add-Type -Namespace Win32 -Name Native -MemberDefinition $member -ErrorAction SilentlyContinue | Out-Null
+                [Win32.Native]::SystemParametersInfo(0x0014, 0, $transcoded, 0x0001 -bor 0x0002) | Out-Null
+                rundll32 user32.dll,UpdatePerUserSystemParameters 1,True
+
+                Log ("Wallpaper aplicado inmediatamente en HKCU para {0}" -f $Username)
+            } else {
+                Log ("Wallpaper preconfigurado; se aplicara al iniciar sesion {0}" -f $Username)
+            }
+        } catch {
+            Log ("No se pudo aplicar en HKCU durante la instalacion: {0}" -f $_.Exception.Message)
         }
     }
 } catch {
-    Log "Failed to change computer name in this environment: $($_.Exception.Message)"
+    Log "Error al aplicar wallpaper: $($_.Exception.Message)"
 }
+
+ try {
+     if ($InstanceLabel) {
+         $currentName = (Get-ComputerInfo).CsName
+         if ($currentName -ne $InstanceLabel) {
+             Rename-Computer -NewName $InstanceLabel -Force -ErrorAction Stop
+            Log "Computer name set to '$InstanceLabel' (will apply after restart)"
+         }
+     }
+ } catch {
+     Log "Failed to change computer name in this environment: $($_.Exception.Message)"
+ }
 
 # === REGION SCAN LOOP ===
 $tunnel = $null
